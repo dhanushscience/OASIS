@@ -26,7 +26,7 @@ export const CHAPTERS = [
       { step: '01', text: 'Per-app context: Chrome, Cursor, VS Code, and more' },
       { step: '02', text: 'AI-suggested mappings and multi-step automations' },
       { step: '03', text: 'Meeting actions, macros, and shared profiles' },
-      { step: '04', text: 'Open source if the response is there' },
+      { step: '04', text: 'Free public beta for Windows, code going open' },
     ],
   },
   {
