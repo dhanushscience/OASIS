@@ -1472,3 +1472,6 @@ body.demo-btn-2 .feature-pad-btn[data-btn="2"] {
 @keyframes sciBlink { 0%, 100% { transform: none; } 94% { transform: scaleY(.15); } }
 @media (max-width: 760px) { .sci-pitch { left: 12px; right: 12px; bottom: 12px; max-width: none; } .sci-fig svg { width: 64px; height: auto; } }
 @media (prefers-reduced-motion: reduce) { .sci-fig, .sci-fig .eye { animation: none; } }
+.sci-pitch { transition: opacity .3s ease, transform .3s ease; }
+.sci-pitch.is-gone { opacity: 0; transform: translateY(16px); pointer-events: none; }
+.sci-note { font-size: 12px; color: var(--version); margin-top: -4px; }

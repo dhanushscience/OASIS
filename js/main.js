@@ -19,3 +19,12 @@ fetch('https://api.github.com/repos/dhanushscience/OASIS-releases/releases/lates
     if (d && d.tag_name && m) m.textContent = `${d.tag_name} · Free beta · 11 MB installer · Windows 10 or 11, 64-bit`;
   })
   .catch(() => {});
+
+// Mr. Science greets visitors on the home screen only; once they scroll, the nav button is the download.
+(function () {
+  const pitch = document.getElementById('sci-pitch');
+  if (!pitch) return;
+  const sync = () => pitch.classList.toggle('is-gone', window.scrollY > 40);
+  window.addEventListener('scroll', sync, { passive: true });
+  sync();
+})();
