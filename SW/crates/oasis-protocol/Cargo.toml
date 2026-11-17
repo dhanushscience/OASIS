@@ -1,0 +1,14 @@
+[package]
+name = "oasis-protocol"
+description = "The frozen OASIS pad wire format (BLE Nordic UART, newline-terminated ASCII)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# std only. The firmware, this app and older app builds must keep interoperating, so this
+# crate has no reason to depend on anything that could change underneath it.
+[dependencies]
+
+[lints]
+workspace = true

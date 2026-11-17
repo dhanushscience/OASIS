@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OASIS HUD</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --accent: #F15025;
+    --ok: #1f9d55; --no: #d93a3a;
+    --ink: #161D1F;
+    --ease: cubic-bezier(.2, .8, .3, 1);
+    /* solid white with a thin accent edge: reads the same on a dark or a light screen. The shadow is
+       kept small so it fits inside the transparent window (a cut-off shadow shows as a hard line). */
+    --face: #fff;
+    --edge: 1.5px solid color-mix(in srgb, var(--accent) 65%, #fff);
+    --lift: 0 3px 10px rgba(15, 20, 40, .22), 0 1px 2px rgba(15, 20, 40, .14);
+  }
+  /* The app's dark theme (tokens.css): an elevated graphite face with a neutral hairline, not an orange
+     ring; the orange is kept for what carries meaning (the bars, the 01 key). A faint top light gives
+     the edge some depth so the bar does not sink into a dark screen. */
+  :root[data-theme='dark'] {
+    --accent: #FF5A1F; --ok: #3CCB75; --no: #F06352;
+    --face: linear-gradient(180deg, #262626, #1A1A1A); --ink: #EDEDED;
+    --edge: 1px solid #333;
+    --lift: inset 0 1px 0 rgba(255, 255, 255, .07), 0 6px 18px rgba(0, 0, 0, .55), 0 1px 2px rgba(0, 0, 0, .5);
+  }
+  :root[data-theme='dark'] #close .k1 { --c: #FF5A1F; color: #0A0A0A; }
+  :root[data-theme='dark'] #close .k2 { --c: #22A898; color: #0A0A0A; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+    font-family: "Segoe UI", system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+  /* Everything sits at the bottom middle of the window, where Rust puts the window: above the taskbar. */
+  body { display: flex; align-items: flex-end; justify-content: center; box-sizing: border-box; padding-bottom: 18px; }
+  [hidden] { display: none !important; }
+
+  /* ---- the listening pill: small, white, the bars follow the voice. */
+  #pill { box-sizing: border-box; height: 34px; padding: 0 14px; border-radius: 999px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    background: var(--face); border: var(--edge); box-shadow: var(--lift);
+    animation: rise .2s var(--ease); }
+  #pill.locked { padding: 0 4px; gap: 12px; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px) scale(.96); } }
+
+  .wave { display: flex; align-items: center; gap: 3px; height: 18px; }
+  .wave i { width: 3px; height: 18px; border-radius: 3px; background: var(--accent);
+    transform: scaleY(.18); transition: transform 90ms linear; }
+  /* Thinking: after the button is let go the bars settle into a slow, soft swell. */
+  #pill.thinking .wave i { transition: none; animation: swell 1.8s ease-in-out infinite; opacity: .7; }
+  #pill.thinking .wave i:nth-child(2) { animation-delay: .1s; }
+  #pill.thinking .wave i:nth-child(3) { animation-delay: .2s; }
+  #pill.thinking .wave i:nth-child(4) { animation-delay: .3s; }
+  #pill.thinking .wave i:nth-child(5) { animation-delay: .4s; }
+  @keyframes swell { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(.5); } }
+  #ready { font-size: 12px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+
+  /* tick (button 1, finishes and pastes) and cross (button 2, cancels) */
+  .round { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; }
+  .round svg { width: 13px; height: 13px; fill: none; stroke: currentColor; stroke-width: 2.8; stroke-linecap: round; stroke-linejoin: round; }
+  .round.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, transparent); }
+  .round.no { color: var(--no); background: color-mix(in srgb, var(--no) 14%, transparent); }
+  .round { cursor: pointer; transition: background-color .12s ease; }
+  .round.ok:hover { background: color-mix(in srgb, var(--ok) 30%, transparent); }
+  .round.no:hover { background: color-mix(in srgb, var(--no) 28%, transparent); }
+
+  /* ---- "Close this app?": the same white bar, in the same place, a little taller. Mr. Science stands
+     on its bottom edge and rises out of the top. */
+  #close { position: relative; box-sizing: border-box; height: 44px; padding: 0 6px 0 62px; border-radius: 999px;
+    display: flex; align-items: center; gap: 10px; color: var(--ink); white-space: nowrap;
+    background: var(--face); border: var(--edge); box-shadow: var(--lift);
+    animation: rise .2s var(--ease); }
+  #close .sci { position: absolute; left: 12px; bottom: 3px; line-height: 0; }
+  #close .q { margin: 0; font-size: 13px; font-weight: 500; }
+  #close .q { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  #close .q b { font-weight: 800; }
+  #close u { text-decoration: none; }
+  #close .k { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 999px;
+    background: var(--c); color: #fff; font-size: 12px; font-weight: 700; }
+  #close .k i { font: normal 600 10px/1 ui-monospace, Consolas, monospace; opacity: .85; }
+  #close .k1 { --c: #ee5a24; }
+  #close .k2 { --c: #1f9e8f; }
+
+  /* ---- "Saving to dictionary": same face, same place. Saved by default; the countdown shows when,
+     and "Don't save" is the only thing to click. */
+  #learn { box-sizing: border-box; width: 300px; padding: 10px 12px 12px 16px; border-radius: 18px;
+    background: var(--face); border: var(--edge); box-shadow: var(--lift); color: var(--ink);
+    animation: rise .2s var(--ease); }
+  #learn .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  #learn .lab { font-size: 10px; font-weight: 700; letter-spacing: .12em; color: var(--accent); }
+  #learn .words { margin-top: 6px; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #learn .words s { opacity: .55; font-weight: 400; }
+  #learn .bar { margin-top: 10px; height: 3px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 12%, transparent); overflow: hidden; }
+  #learn .bar i { display: block; height: 100%; background: var(--accent); transform-origin: left; animation: drain var(--learn-ms, 4000ms) linear forwards; }
+  @keyframes drain { to { transform: scaleX(0); } }
+  #learn button { font: inherit; font-size: 11px; font-weight: 600; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+    background: transparent; color: var(--ink); border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); }
+  #learn button:hover { border-color: var(--no); color: var(--no); }
+
+  /* ---- the vertical pop-up: Rust stands the window at a side of the screen, vertically centred. The
+     pill stands up (tick on top, bars stacked and swinging sideways, cross at the bottom); the boxes
+     with words keep their shape and sit against that side. */
+  body[data-side='left'] #pill, body[data-side='right'] #pill { height: auto; width: 34px; padding: 14px 0; flex-direction: column; }
+  body[data-side='left'] #pill.locked, body[data-side='right'] #pill.locked { padding: 4px 0; }
+  body[data-side='left'] .wave, body[data-side='right'] .wave { flex-direction: column; height: auto; width: 18px; }
+  body[data-side='left'] .wave i, body[data-side='right'] .wave i { width: 18px; height: 3px; transform: scaleX(.18); }
+  body[data-side='left'] #pill.thinking .wave i, body[data-side='right'] #pill.thinking .wave i { animation-name: swellx; }
+  @keyframes swellx { 0%, 100% { transform: scaleX(.25); } 50% { transform: scaleX(.5); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #pill, #close, #learn { animation: none; }
+    .wave i { transition: none; animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="pill" hidden>
+  <span class="round ok" hidden role="button" data-button="0" title="Finish (button 1)"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
+  <span class="wave"><i></i><i></i><i></i><i></i><i></i></span>
+  <span id="ready" hidden></span>
+  <span class="round no" hidden role="button" data-button="1" title="Cancel (button 2)"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></span>
+</div>
+<div id="close" role="status" hidden>
+  <span class="sci"></span>
+  <p class="q"></p>
+  <span class="k k1"><i>01</i><u>Close</u></span><span class="k k2"><i>02</i><u>Keep</u></span>
+</div>
+<div id="learn" role="status" hidden>
+  <div class="top"><span class="lab">SAVING TO DICTIONARY</span><button type="button">Don't save</button></div>
+  <div class="words"></div>
+  <div class="bar"><i></i></div>
+</div>
+<script>
+  const { listen } = window.__TAURI__.event;
+  const pill = document.getElementById('pill');
+  const close = document.getElementById('close');
+  const ready = document.getElementById('ready');
+  const rounds = [...pill.querySelectorAll('.round')];
+  const wave = pill.querySelector('.wave');
+  const bars = [...wave.children];
+  // A click on the tick or cross is a press and release of that button, as from the pad.
+  const { invoke } = window.__TAURI__.core;
+  rounds.forEach((r) => r.addEventListener('click', async () => {
+    const button = Number(r.dataset.button);
+    await invoke('press_button', { button, down: true }).catch(() => {});
+    invoke('press_button', { button, down: false }).catch(() => {});
+  }));
+  // The app's theme (saved by the main window, shared by every OASIS window): light, dark, or follow
+  // Windows. A change there reaches this window as a storage event; a Windows switch as a media change.
+  // Mr. Science keeps his dark outline in both themes: the light one read as a white sticker edge on the dark bar.
+  import('./mrscience.js').then((m) => { close.querySelector('.sci').innerHTML = m.svg('light', 3); }).catch(() => {});
+  function theme() {
+    let t = null;
+    try { t = localStorage.getItem('oasis-theme'); } catch (_) { /* blocked storage: follow Windows */ }
+    if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = t;
+  }
+  theme();
+  window.addEventListener('storage', (e) => { if (e.key === 'oasis-theme' || e.key === null) theme(); });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', theme);
+
+  // The bars follow the voice: the middle bar is the loudness now, each pair further out is the
+  // loudness a moment earlier, so speech ripples outward and silence settles flat.
+  const recent = [0, 0, 0];
+  const SHAPE = [0.6, 0.85, 1, 0.85, 0.6];
+  function level(percent) {
+    // quiet speech is only a few percent; a square root lifts it so normal talking fills the bars
+    recent.unshift(Math.sqrt(Math.min(100, percent) / 100));
+    recent.length = 3;
+    const at = [recent[2], recent[1], recent[0], recent[1], recent[2]];
+    const axis = document.body.dataset.side === 'left' || document.body.dataset.side === 'right' ? 'scaleX' : 'scaleY';
+    bars.forEach((b, i) => { b.style.transform = `${axis}(${Math.max(0.18, Math.min(1, at[i] * SHAPE[i] * 1.6))})`; });
+  }
+  // Across the bottom, or standing at a side: Rust says which each time it shows the window.
+  listen('hud-side', ({ payload: side }) => { document.body.dataset.side = side; flat(); });
+  function flat() { recent.fill(0); bars.forEach((b) => { b.style.transform = ''; }); }
+
+  // "locked" stays until the recording ends (thinking or idle), even while listening/dictating events follow.
+  let locked = false;
+  function show(phase) {
+    const getting = /^getting_ready:(\d+)$/.exec(phase || '');
+    if (phase === 'locked') locked = true;
+    else if (phase === 'thinking' || phase === 'idle' || getting || !phase) locked = false;
+    const on = locked || getting || ['listening', 'dictating', 'thinking'].includes(phase);
+    pill.hidden = !on;
+    if (!on) return flat();
+    pill.classList.toggle('locked', locked);
+    pill.classList.toggle('thinking', phase === 'thinking');
+    if (phase === 'thinking') bars.forEach((b) => { b.style.transform = ''; });
+    rounds.forEach((r) => { r.hidden = !locked; });
+    wave.hidden = !!getting;
+    ready.hidden = !getting;
+    if (getting) ready.textContent = 'Voice is getting ready: ' + getting[1] + '%';
+  }
+
+  // A word fixed by hand after dictation: shown with a countdown, saved when it runs out. Anything else
+  // that takes the window (a new recording, the close question) saves it at once and moves over.
+  const learn = document.getElementById('learn');
+  const LEARN_MS = 4000;
+  let learnTimer = 0, learnWords = null;
+  function answerLearn(save) {
+    if (!learnWords) return;
+    const words = learnWords;
+    learnWords = null;
+    clearTimeout(learnTimer);
+    learn.hidden = true;
+    invoke('learn_answer', { save, words }).catch(() => {});
+  }
+  learn.querySelector('button').addEventListener('click', () => answerLearn(false));
+  listen('learn-offer', ({ payload: words }) => {
+    answerLearn(true); // a newer offer saves the one still counting down
+    learnWords = words;
+    learn.querySelector('.words').replaceChildren(...words.flatMap(([heard, written], i) => {
+      const s = document.createElement('s');
+      s.textContent = heard;
+      return [...(i ? [', '] : []), s, ' → ' + written];
+    }));
+    pill.hidden = true;
+    close.hidden = true;
+    learn.style.setProperty('--learn-ms', LEARN_MS + 'ms');
+    learn.hidden = true;
+    void learn.offsetWidth; // restart the countdown bar
+    learn.hidden = false;
+    learnTimer = setTimeout(() => answerLearn(true), LEARN_MS);
+  });
+
+  // The microphone level has an event of its own (main.rs), so the other windows are not woken 20 times a second.
+  listen('voice-level', ({ payload: e }) => { if (!pill.hidden && !pill.classList.contains('thinking')) level(e.level); });
+  listen('engine-event', ({ payload: e }) => {
+    if ((e.type === 'voice' && e.phase && e.phase !== 'idle') || e.type === 'confirm') answerLearn(true);
+    if (e.type === 'voice') { if (close.hidden) show(e.phase); }
+    else if (e.type === 'confirm') {
+      const q = close.querySelector('.q');
+      if (e.close != null) q.replaceChildren('Close ', Object.assign(document.createElement('b'), { textContent: e.close }), '?');
+      else q.textContent = e.summary.split(/\s+Button 1/)[0]; // keys 01 / 02 say the rest
+      const [a, b] = close.querySelectorAll('.k u');
+      a.textContent = e.close != null ? 'Close' : 'Run';
+      b.textContent = e.close != null ? 'Keep' : 'Cancel';
+      close.hidden = false;
+      pill.hidden = true;
+    } else if (e.type === 'confirm_end') close.hidden = true;
+  });
+</script>
+</body>
+</html>

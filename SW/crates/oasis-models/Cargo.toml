@@ -1,0 +1,16 @@
+[package]
+name = "oasis-models"
+description = "Replaceable speech-to-text, LLM and text-to-speech engines: traits, backend specs and model selection. No I/O."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# Pure like oasis-core: backends (sherpa-onnx, llama.cpp, Piper) live behind cargo features in
+# their own adapter crates/modules and are added when their bindings are. Copying imported
+# files into the models folder is done by oasis-platform.
+[dependencies]
+oasis-core = { path = "../oasis-core" }
+
+[lints]
+workspace = true

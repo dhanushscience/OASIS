@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: How to send a good bug report (and which log files to attach)
+    url: https://github.com/dhanushscience/OASIS/blob/master/beta/FEEDBACK.md
+    about: Read this first. It lists the log files in %APPDATA%\ProjectOASIS.

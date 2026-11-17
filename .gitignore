@@ -1,0 +1,23 @@
+# Hardware
+HW/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Build / temp
+build/
+*.log
+*.tmp
+
+# Private to the owner: never tracked, never pushed
+/INSPI/
+/docs/
+
+# Cleanup-model fine-tuning experiments (private until it works)
+/finetune/

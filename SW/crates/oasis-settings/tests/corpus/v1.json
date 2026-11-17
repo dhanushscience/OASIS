@@ -1,0 +1,42 @@
+{
+  "SchemaVersion": 1,
+  "OverlayX": 0,
+  "OverlayY": 100,
+  "ShowOverlayLabels": true,
+  "OverlayAppearance": {
+    "IndicatorSpacing": 14,
+    "LabelSpacing": 8,
+    "LabelCornerRadius": 22,
+    "LabelFontOpacity": 1,
+    "LabelBubbleOpacity": 1
+  },
+  "Ai": {
+    "Model": "gemini-2.5-flash"
+  },
+  "Voice": {
+    "ModelFileName": "moonshine-base-en",
+    "LlmModelFileName": "gemma-4-E2B-it-Q3_K_M.gguf",
+    "IntentMode": 3
+  },
+  "Meetings": {
+    "GoogleClientSecret": ""
+  },
+  "Profiles": [
+    {
+      "Name": "Default",
+      "ContextMatch": "*",
+      "MultiConfigEnabled": false,
+      "ConfigProfiles": [
+        {
+          "Name": "Default",
+          "ContextMatch": "*",
+          "Buttons": [
+            { "Type": "Shortcut", "Value": "Ctrl+C", "Label": "Copy" },
+            { "Type": "Shortcut", "Value": "Ctrl+V", "Label": "Paste" },
+            { "Type": "Shortcut", "Value": "Win+D", "Label": "Desktop" }
+          ]
+        }
+      ]
+    }
+  ]
+}

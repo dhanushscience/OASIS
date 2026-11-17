@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>OASIS overlay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Everything is set from the settings by the script below; these are only the C# defaults so
+     the first frame is not unstyled. */
+  :root {
+    --pill-w: 8px; --pill-h: 50px; --gap: 14px; --pill-opacity: 1;
+    --pill-1: #6E8090; --pill-2: #D0D8DC; --pill-3: #F4FAFD;
+    --bubble-bg: #FFFFFF; --bubble-text: #161D1F; --bubble-border: #D0D8DC;
+    --bubble-opacity: 100%; --text-opacity: 100%; --font-size: 14px;
+    --label-gap: 8px; --radius: 22px;
+    /* the pressed bar flashes in the app's accent, as the C# overlay did */
+    --accent: #F15025;
+    --ease: cubic-bezier(.2, .8, .3, 1);
+  }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden;
+    font-family: "Segoe UI", system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
+
+  body.jump, body.jump * { transition: none !important; animation: none !important; }
+  #stack { position: absolute; display: flex; gap: var(--gap); transition: opacity .25s var(--ease); }
+  .row { display: flex; align-items: center; gap: var(--label-gap); }
+  .pill { width: var(--pill-w); height: var(--pill-h); border-radius: 999px; flex: none;
+    opacity: var(--pill-opacity); transition: transform .25s var(--ease), opacity .25s var(--ease), background-color .12s ease; }
+  .row:nth-child(1) .pill { background: var(--pill-1); }
+  .row:nth-child(2) .pill { background: var(--pill-2); }
+  .row:nth-child(3) .pill { background: var(--pill-3); }
+  .row.press .pill { background: var(--accent); }
+
+  .bubble { max-width: 200px; padding: 6px 16px; border-radius: var(--radius); box-sizing: border-box;
+    font-size: var(--font-size); font-weight: 600; letter-spacing: .04em; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    /* Glass, but never so clear the label is lost: the label colour at up to 90% (enough body for the
+       text on a busy or dark screen), a light sheen from the top, a bright rim and a hairline outside it. */
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, .38), rgba(255, 255, 255, 0) 60%),
+      color-mix(in srgb, var(--bubble-bg) calc(var(--bubble-opacity) * .9), transparent);
+    color: color-mix(in srgb, var(--bubble-text) var(--text-opacity), transparent);
+    border: 1px solid rgba(255, 255, 255, .6);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 0 0 .5px rgba(0, 0, 0, .12), 0 2px 8px rgba(0, 0, 0, .16);
+    opacity: 0; transition: opacity .15s ease, transform .15s ease; }
+  .showing .bubble:not(:empty) { opacity: 1; transform: none !important; }
+
+  /* ---- arrangements. Down an edge: bars stacked, the label beside each on the inner side. */
+  body.dock-right #stack { right: 6px; top: 50%; transform: translateY(-50%); flex-direction: column; align-items: flex-end; }
+  body.dock-right .row { flex-direction: row; justify-content: flex-end; height: var(--pill-h); }
+  body.dock-right .bubble { transform: translateX(8px); }
+  body.dock-left #stack { left: 6px; top: 50%; transform: translateY(-50%); flex-direction: column; align-items: flex-start; }
+  body.dock-left .row { flex-direction: row-reverse; justify-content: flex-end; height: var(--pill-h); }
+  body.dock-left .bubble { transform: translateX(-8px); }
+  /* In a row, centred: the bars lie flat, each label over (or under) its own bar. */
+  body.dock-bottom #stack, body.dock-top #stack { left: 50%; transform: translateX(-50%); flex-direction: row; }
+  body.dock-bottom #stack { bottom: 6px; align-items: flex-end; }
+  body.dock-top #stack { top: 6px; align-items: flex-start; }
+  body.dock-bottom .row, body.dock-top .row { width: 200px; justify-content: flex-start; }
+  body.dock-bottom .row { flex-direction: column; }
+  body.dock-top .row { flex-direction: column-reverse; }
+  body.dock-bottom .pill, body.dock-top .pill { width: var(--pill-h); height: var(--pill-w); }
+  body.dock-bottom .bubble { transform: translateY(8px); }
+  body.dock-top .bubble { transform: translateY(-8px); }
+
+  /* In a row, at rest, the three fold into one bar in the middle; in use they spread out to their
+     places (the outer two slide out from the centre) and the labels open over them. */
+  body.dock-bottom .row, body.dock-top .row { transition: transform .38s var(--ease); }
+  body.dock-bottom:not(.active) .row:nth-child(1), body.dock-top:not(.active) .row:nth-child(1) { transform: translateX(calc(200px + var(--gap))); }
+  body.dock-bottom:not(.active) .row:nth-child(3), body.dock-top:not(.active) .row:nth-child(3) { transform: translateX(calc(-200px - var(--gap))); }
+  body.dock-bottom:not(.active) .row:not(:nth-child(2)) .pill, body.dock-top:not(.active) .row:not(:nth-child(2)) .pill { opacity: 0; }
+
+  /* ---- at rest. Faint: smaller and light at the edge, as in the C# app; full colour while in use. */
+  body.idle-faint:not(.active) .pill { transform: scale(.6); opacity: calc(var(--pill-opacity) * .3); }
+  body.idle-hidden:not(.active) #stack { opacity: 0; }
+
+  /* A spoken command that needs a yes or no from the pad. */
+  /* "Pick the section": OASIS is minimised; this asks for the click and counts down. */
+  #pick { position: absolute; width: 230px; box-sizing: border-box; padding: 10px 14px; border-radius: 14px;
+    background: var(--bubble-bg); color: var(--bubble-text); border: 2px solid var(--accent);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .18); font-size: 13px; font-weight: 600; line-height: 1.35; opacity: 0; transition: opacity .15s ease; }
+  #pick.on { opacity: 1; }
+  #pick .sub { display: block; margin-top: 3px; font-size: 11px; font-weight: 500; opacity: .7; }
+  #pick .n { color: var(--accent); }
+  body.dock-right #confirm, body.dock-right #pick { right: 6px; }
+  body.dock-left #confirm, body.dock-left #pick { left: 6px; }
+  body.dock-right #confirm, body.dock-left #confirm, body.dock-right #pick, body.dock-left #pick { top: 40px; }
+  body.dock-bottom #confirm, body.dock-top #confirm,
+  body.dock-bottom #pick, body.dock-top #pick { left: 50%; transform: translateX(-50%); }
+  body.dock-bottom #confirm, body.dock-bottom #pick { top: 36px; }
+  body.dock-top #confirm, body.dock-top #pick { bottom: 36px; }
+
+  /* "Move overlay" mode: a visible frame, and the whole window drags. */
+  body.moving #frame { position: absolute; inset: 2px; border: 2px dashed var(--accent); border-radius: 12px;
+    background: rgba(20, 28, 32, .55); display: flex; align-items: flex-start; justify-content: center; }
+  body.moving #hint { color: #F4FAFD; font-size: 12px; margin-top: 6px; text-align: center; padding: 0 10px; }
+  #frame, #hint { display: none; }
+  body.moving #frame, body.moving #hint { display: flex; }
+  body.moving #stack { z-index: 2; pointer-events: none; }
+</style>
+</head>
+<body class="dock-right idle-faint">
+<div id="frame" data-tauri-drag-region><span id="hint" data-tauri-drag-region>Drag me, then press Done moving</span></div>
+<div id="stack">
+  <div class="row"><div class="bubble"></div><div class="pill"></div></div>
+  <div class="row"><div class="bubble"></div><div class="pill"></div></div>
+  <div class="row"><div class="bubble"></div><div class="pill"></div></div>
+</div>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+  const rows = [...document.querySelectorAll('.row')];
+  const root = document.documentElement.style;
+  const body = document.body;
+  const stack = document.getElementById('stack');
+  const pct = (v) => `${Math.round(v * 100)}%`;
+
+  function applyLook(a) {
+    root.setProperty('--pill-1', a.indicator_colors[0]);
+    root.setProperty('--pill-2', a.indicator_colors[1]);
+    root.setProperty('--pill-3', a.indicator_colors[2]);
+    root.setProperty('--pill-w', a.indicator_width + 'px');
+    root.setProperty('--pill-h', a.indicator_height + 'px');
+    root.setProperty('--gap', a.indicator_spacing + 'px');
+    root.setProperty('--pill-opacity', a.indicator_opacity);
+    root.setProperty('--bubble-bg', a.label_background);
+    root.setProperty('--bubble-text', a.label_text);
+    root.setProperty('--bubble-border', a.label_border);
+    root.setProperty('--bubble-opacity', pct(a.label_bubble_opacity));
+    root.setProperty('--text-opacity', pct(a.label_font_opacity));
+    root.setProperty('--font-size', a.label_font_size + 'px');
+    root.setProperty('--label-gap', a.label_spacing + 'px');
+    root.setProperty('--radius', a.label_corner_radius + 'px');
+    for (const c of [...body.classList]) if (c.startsWith('dock-') || c.startsWith('idle-')) body.classList.remove(c);
+    body.classList.add('dock-' + (a.dock || 'right'), 'idle-' + (a.idle || 'faint'));
+  }
+
+  async function loadLook() {
+    try { applyLook(await invoke('overlay_look')); } catch (_) { /* keep the defaults */ }
+    // the window's size and place follow the arrangement
+    try { await invoke('overlay_relayout'); } catch (_) {}
+  }
+
+  // ---- in use or at rest. In use: a button is down, labels show, voice is working, a question is
+  // up, or it is being moved. It rests again a moment after the last of those ends.
+  const busy = new Set();
+  let restTimer = 0;
+  // While voice is working the talk button and the voice only wake the bars; they go back to rest after
+  // the same moment, so the overlay does not sit lit the whole time someone speaks.
+  let speaking = false;
+  const keepsAwake = (r) => !(speaking && (r === 'voice' || r.startsWith('press')));
+  function use(reason, on) {
+    if (on) busy.add(reason); else busy.delete(reason);
+    clearTimeout(restTimer);
+    if ([...busy].some(keepsAwake)) body.classList.add('active');
+    else restTimer = setTimeout(() => { if (![...busy].some(keepsAwake)) body.classList.remove('active'); }, 1500);
+  }
+
+  function setLabels(labels) {
+    rows.forEach((row, i) => { row.querySelector('.bubble').textContent = (labels && labels[i]) || ''; });
+  }
+
+  // a press flashes the bar for at least 300 ms, even a very short tap
+  const pressedAt = [0, 0, 0];
+  function press(i, down) {
+    const row = rows[i];
+    if (!row) return;
+    if (down) { pressedAt[i] = Date.now(); row.classList.add('press'); use('press' + i, true); return; }
+    const left = Math.max(0, 300 - (Date.now() - pressedAt[i]));
+    setTimeout(() => row.classList.remove('press'), left);
+    use('press' + i, false);
+  }
+
+  listen('engine-event', ({ payload: e }) => {
+    switch (e.type) {
+      case 'pad_button':
+        press(e.button - 1, e.down);
+        break;
+      case 'show_labels':
+        setLabels(e.labels);
+        stack.classList.add('showing');
+        use('labels', true);
+        break;
+      case 'hide_labels':
+        stack.classList.remove('showing');
+        use('labels', false);
+        break;
+      case 'voice': {
+        const on = ['listening', 'dictating', 'thinking', 'locked'].includes(e.phase) || /^getting_ready:/.test(e.phase || '');
+        if (on && speaking) break; // already awake once for this session; later phases must not restart the rest timer
+        speaking = on;
+        use('voice', on);
+        break;
+      }
+      case 'confirm': // the question itself is drawn by the HUD (with Mr. Science); the bars just wake
+        use('confirm', true);
+        break;
+      case 'confirm_end':
+        use('confirm', false);
+        break;
+      case 'pad_lost':
+        rows.forEach((row, i) => { row.classList.remove('press'); use('press' + i, false); });
+        break;
+      case 'settings_changed':
+        loadLook();
+        break;
+    }
+  });
+  // "Pick the section": a countdown while OASIS waits for the click, then what was caught, then gone.
+  const pick = document.getElementById('pick');
+  let pickTimer = 0;
+  listen('pick-prompt', ({ payload: p }) => {
+    clearTimeout(pickTimer);
+    if (!p) { pick.classList.remove('on'); use('pick', false); return; }
+    if (p.done) {
+      pick.textContent = p.done;
+      pickTimer = setTimeout(() => { pick.classList.remove('on'); use('pick', false); }, 1800);
+    } else {
+      pick.innerHTML = 'Click the section you want <span class="n"></span><span class="sub">In the other program: a terminal, the editor, a page. Esc cancels.</span>';
+      pick.querySelector('.n').textContent = p.left + 's';
+    }
+    pick.classList.add('on');
+    use('pick', true);
+  });
+
+  // Moved to another screen (and maybe resized): show it there at once, with nothing sliding or scaling.
+  listen('overlay-jump', () => {
+    document.body.classList.add('jump');
+    setTimeout(() => document.body.classList.remove('jump'), 500);
+  });
+  listen('overlay-moving', ({ payload: moving }) => {
+    body.classList.toggle('moving', !!moving);
+    use('moving', !!moving);
+    if (!moving) loadLook();
+  });
+  loadLook();
+</script>
+</body>
+</html>

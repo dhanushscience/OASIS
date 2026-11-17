@@ -1,0 +1,3 @@
+The sensor node uses an STM32L431 with an nRF52840 radio, and it publishes readings over MQTT every thirty seconds.
+
+selfcheck-16k.wav is this sentence spoken by the Piper voice en_US-ryan-medium (synthetic speech, not a recording of a person), converted to 16 kHz mono. The model setup check (docs/VOICE_MODEL_SETUP.md 2.3) times the speech model on it.

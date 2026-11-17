@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>OASIS guide</title>
+  <!--
+    The first-run guide's caption panel: Mr. Science and one line, shown low on the screen while another
+    program is in front (after the first press, and while the person talks to Notepad).
+    Written by hand, not built by Vite. It draws him itself from mrscience.js and looks his line up in
+    lines.js; both are copied here by the build (web/scripts/copy-guide.mjs). The app tells it only
+    which step, which line and which mood: `guide-overlay` with { animation, step, line }, or {} to hide.
+    The window takes no clicks and never the keyboard, so dictated words cannot land in it.
+  -->
+  <style>
+    @font-face { font-family: 'Geist'; src: url('./fonts/Geist-Variable.woff2') format('woff2'); font-weight: 100 900; }
+    /* the same surface, ink and line as tokens.css, in both themes */
+    :root { --surface: #F8FCFF; --ink: #141414; --line: #C5C5C5; --shadow: rgb(0 0 0 / .22); }
+    :root[data-theme='dark'] { --surface: #141414; --ink: #EDEDED; --line: #2E2E2E; --shadow: rgb(0 0 0 / .7); }
+    html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+    body { display: flex; align-items: flex-end; justify-content: center; font-family: 'Geist', system-ui, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; user-select: none; }
+    /* a solid panel, so his black coat and its outline read over any desktop */
+    #panel { margin: 0 12px 12px; display: none; align-items: flex-end; gap: 12px; }
+    #panel.on { display: flex; animation: in .24s cubic-bezier(.22, 1, .36, 1); }
+    #who { flex: none; line-height: 0; padding: 8px 8px 6px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); transform-origin: 50% 100%; }
+    #say { max-width: 380px; margin: 0 0 6px; padding: 14px 18px; border-radius: 20px 20px 20px 4px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 10px 28px var(--shadow); color: var(--ink); font-size: 16px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .eye { transform-box: fill-box; transform-origin: center; animation: blink 4.3s steps(1) infinite; }
+    #who svg { transform-origin: 50% 100%; }
+    .idle svg { animation: bob 3.2s ease-in-out infinite; }
+    .point svg { animation: lean 1.6s ease-in-out infinite alternate; }
+    .thinking svg { animation: tilt 2.4s ease-in-out infinite alternate; }
+    .success svg { animation: jump .72s cubic-bezier(.22, 1, .36, 1) 2; }
+    .retry svg { animation: shake .48s ease-in-out 1; }
+    @keyframes in { from { opacity: 0; transform: translateY(8px); } }
+    @keyframes blink { 0%, 100% { transform: none; } 94% { transform: scaleY(.15); } }
+    @keyframes bob { 50% { transform: translateY(-2px); } }
+    @keyframes lean { to { transform: rotate(5deg) translateX(3px); } }
+    @keyframes tilt { to { transform: rotate(-4deg); } }
+    @keyframes jump { 40% { transform: translateY(-12px); } }
+    @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+    @media (prefers-reduced-motion: reduce) { #panel.on, .eye, #who svg { animation: none !important; } }
+  </style>
+</head>
+<body>
+  <div id="panel" role="status"><div id="who"></div><p id="say"></p></div>
+  <script>
+    (async function () {
+      var theme = null;
+      try { theme = localStorage.getItem('oasis-theme'); } catch (e) {}
+      if (theme !== 'light' && theme !== 'dark') theme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = theme;
+
+      // A classic script cannot import; these two are plain modules beside this page.
+      var sprite = await import('./mrscience.js');
+      var lines = await import('./lines.js');
+      var panel = document.getElementById('panel'), who = document.getElementById('who'), say = document.getElementById('say');
+      who.innerHTML = sprite.svg(theme, 4);
+
+      window.__TAURI__.event.listen('guide-overlay', function (e) {
+        var p = e.payload || {};
+        var text = p.step ? lines.line(p.step, p.line || 0) : '';
+        if (!text) { panel.className = ''; return; }
+        say.textContent = text;
+        who.className = p.animation || 'idle';
+        panel.className = 'on';
+      });
+    })();
+  </script>
+</body>
+</html>

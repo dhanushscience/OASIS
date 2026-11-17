@@ -1,0 +1,53 @@
+/* The old screens' look, moved onto the new tokens and kept to `.legacy` so it cannot leak into
+   the new shell. Plain on purpose: each screen is restyled when its own step is built. */
+
+:root { --accent: #2f6f8f; } /* the toasts and reminders the old script puts on <body> use it */
+[hidden] { display: none !important; }
+
+.legacy { --card: var(--sunk); --text: var(--ink); --field: var(--surface); --track: var(--line); --accent: var(--ink);
+  max-width: 640px; display: grid; gap: 12px; font-size: 14px; line-height: 1.45; }
+.legacy .card { background: var(--card); border-radius: var(--r-row); padding: 12px 14px; }
+.legacy .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.legacy .label { color: var(--muted); font: 500 11px/1.3 var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.legacy .big { font-size: 16px; font-weight: 600; }
+.legacy .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 8px; background: var(--muted); }
+.legacy .dot.ok { background: var(--ok); } .legacy .dot.warn { background: var(--warn); } .legacy .dot.bad { background: var(--bad); }
+.legacy .banner { border-radius: var(--r-row); padding: 10px 12px; border: 1px solid; }
+.legacy .banner.warn { border-color: var(--warn); color: var(--warn); }
+.legacy .banner.bad { border-color: var(--bad); color: var(--bad); }
+.legacy .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.legacy .setting { display: flex; gap: 14px; align-items: center; justify-content: space-between; padding: 9px 0; border-top: 1px solid var(--line); }
+.legacy .setting:first-of-type { border-top: 0; }
+.legacy .setting .text { min-width: 0; }
+.legacy .setting .name { font-weight: 500; }
+.legacy .setting .control { flex: none; display: flex; align-items: center; gap: 8px; }
+.legacy .setting select { width: auto; max-width: 220px; }
+.legacy .setting input[type=range] { width: 150px; accent-color: var(--ink); }
+.legacy .setting .num { min-width: 3.2em; text-align: right; color: var(--muted); }
+.legacy .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid var(--line); display: inline-block; }
+.legacy .switch { position: relative; width: 44px; height: 24px; flex: none; }
+.legacy .switch input { opacity: 0; width: 100%; height: 100%; margin: 0; position: absolute; cursor: pointer; z-index: 1; }
+.legacy .track { position: absolute; inset: 0; background: var(--track); border-radius: 12px; transition: background-color .15s var(--ease); }
+.legacy .track::after { content: ""; position: absolute; width: 18px; height: 18px; left: 3px; top: 3px; background: var(--surface); border-radius: 50%; transition: transform .15s var(--ease); }
+.legacy .switch input:checked + .track { background: var(--ink); }
+.legacy .switch input:checked + .track::after { transform: translateX(20px); }
+.legacy .switch input:focus-visible + .track { outline: 2px solid var(--signal); outline-offset: 2px; }
+.legacy .switch input:disabled { cursor: not-allowed; } .legacy .switch input:disabled + .track { opacity: .5; }
+.legacy ul { list-style: none; margin: 8px 0 0; padding: 0; max-height: 240px; overflow: auto; }
+.legacy li { padding: 5px 0; border-top: 1px solid var(--line); display: flex; gap: 10px; }
+.legacy li:first-child { border-top: 0; }
+.legacy li time { color: var(--muted); flex: none; }
+.legacy li.bad { color: var(--bad); } .legacy li.note { color: var(--warn); } .legacy li.skipped { color: var(--muted); }
+.legacy .empty { color: var(--muted); padding: 8px 0 2px; }
+.legacy label.field { display: grid; gap: 3px; margin-top: 10px; }
+.legacy label.field > span { color: var(--muted); font-size: 12px; }
+.legacy input[type=number] { background: var(--field); color: var(--text); font: inherit; border: 1px solid var(--line); border-radius: var(--r-field); padding: 6px 8px; }
+.legacy input[type=text], .legacy select { width: 100%; background: var(--field); color: var(--text); font: inherit; border: 1px solid var(--line); border-radius: var(--r-field); padding: 6px 8px; }
+.legacy input:disabled { opacity: .55; }
+.legacy .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.legacy button.action { background: var(--ink); color: var(--surface); border: 0; border-radius: var(--r-pill); padding: 6px 14px; font: inherit; font-weight: 600; cursor: pointer; }
+.legacy button.action.quiet { background: none; color: var(--ink); border: 1px solid var(--line); }
+.legacy button.action:disabled { opacity: .5; cursor: not-allowed; }
+.legacy .msg { font-size: 12px; min-height: 1.4em; }
+.legacy .msg.ok { color: var(--ok); } .legacy .msg.bad { color: var(--bad); }
+.legacy .toolbar { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-top: 10px; }

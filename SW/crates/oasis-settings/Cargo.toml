@@ -1,0 +1,18 @@
+[package]
+name = "oasis-settings"
+description = "OASIS settings document (profiles.json): typed model, schema migration, lossless round-trip."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# First crate with external dependencies (DECISIONS D11). oasis-core and oasis-protocol stay
+# std-only; JSON lives here so the pure crates never see it. `preserve_order` keeps keys in
+# file order inside each section. Top-level modelled fields are written first, then the rest.
+[dependencies]
+oasis-core = { path = "../oasis-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[lints]
+workspace = true

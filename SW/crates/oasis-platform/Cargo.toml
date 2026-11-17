@@ -1,0 +1,31 @@
+[package]
+name = "oasis-platform"
+description = "OS adapters for OASIS: file locations, storage, logging, and the traits each OS backend implements (BLE, foreground app, input, secrets, media, audio)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oasis-core = { path = "../oasis-core" }
+oasis-protocol = { path = "../oasis-protocol" }
+oasis-settings = { path = "../oasis-settings" }
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+serde_json = "1"
+getrandom = "0.3"
+tungstenite = "0.26"
+
+[target.'cfg(windows)'.dependencies]
+oasis-dpapi = { path = "../oasis-dpapi" }
+oasis-win = { path = "../oasis-win" }
+
+# Per-OS backend crates are added here as each backend is built (see README.md). Planned:
+#   all OSes : btleplug (BLE), cpal (mic), keyring (secrets)
+#   windows  : windows (Win32 / WinRT: foreground window, SendInput, GSMTC media, DPAPI)
+#   macos    : objc2 + objc2-app-kit (NSWorkspace, CGEvent, Accessibility)
+#   linux    : zbus (MPRIS media, BlueZ, Secret Service), x11rb / Wayland portals
+
+[lints]
+workspace = true

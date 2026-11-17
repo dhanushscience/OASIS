@@ -1,0 +1,26 @@
+[package]
+name = "oasis-cli"
+description = "Headless OASIS harness: replay pad traffic through the real pipeline, show paths and platform status."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "oasis"
+path = "src/main.rs"
+
+[dependencies]
+oasis-core = { path = "../../crates/oasis-core" }
+oasis-settings = { path = "../../crates/oasis-settings" }
+oasis-protocol = { path = "../../crates/oasis-protocol" }
+oasis-app = { path = "../../crates/oasis-app" }
+oasis-platform = { path = "../../crates/oasis-platform" }
+oasis-ble = { path = "../../crates/oasis-ble" }
+oasis-engine = { path = "../../crates/oasis-engine" }
+
+[target.'cfg(windows)'.dependencies]
+oasis-win = { path = "../../crates/oasis-win" }
+
+[lints]
+workspace = true

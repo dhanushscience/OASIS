@@ -1,0 +1,23 @@
+[package]
+name = "oasis-dpapi"
+description = "Windows DPAPI (per-user, with entropy) for OASIS secret files. The only crate allowed to use unsafe."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# Why this crate exists: the C# app protects secrets with DPAPI, CurrentUser scope, plus an
+# entropy string. To read those files the Rust build must make the same two Win32 calls, and
+# calling Win32 is unsafe. Every other crate keeps `unsafe_code = "forbid"`; the unsafe lives
+# here, in one small module, behind a safe API. `windows-dpapi` (crates.io) was rejected: it
+# is machine-scope only and cannot read these files.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+
+# Not `workspace = true`: that would forbid unsafe. Everything else matches the workspace.
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }

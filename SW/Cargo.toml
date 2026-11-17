@@ -1,0 +1,43 @@
+# OASIS companion app — Rust workspace.
+#
+# One workspace, several crates, same layering as the C# solution in OASIS/SW:
+#   oasis-core      ← Oasis.Core         (pure domain, no I/O)
+#   oasis-protocol  ← BLE wire format    (docs/PROTOCOLS.md, frozen)
+#   oasis-app       ← Oasis.Application  (hosts that drive the reducers, timers, capabilities)
+#   oasis-platform  ← Oasis.Adapters.Windows + Platform/ (per-OS: Windows, macOS, Linux)
+#   apps/oasis-cli  ← headless harness to drive the pipeline without hardware or UI
+#
+# See README.md for the folder map and docs/PORTING.md for what is ported so far.
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/oasis-core",
+    "crates/oasis-protocol",
+    "crates/oasis-app",
+    "crates/oasis-platform",
+    "crates/oasis-models",
+    "crates/oasis-settings",
+    "crates/oasis-dpapi",
+    "crates/oasis-win",
+    "crates/oasis-ble",
+    "crates/oasis-voice",
+    "crates/oasis-engine",
+    "apps/oasis-cli",
+    "apps/oasis-desktop",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/your-org/oasis"
+rust-version = "1.82"
+
+[workspace.lints.rust]
+# Same spirit as TreatWarningsAsErrors in the C# build: CI runs with -D warnings.
+unsafe_code = "forbid"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

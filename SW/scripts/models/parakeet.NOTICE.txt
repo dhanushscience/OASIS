@@ -1,0 +1,9 @@
+Parakeet speech models
+
+Parakeet TDT 0.6B v2 and Parakeet TDT-CTC 110M were created by NVIDIA and are
+licensed under the Creative Commons Attribution 4.0 International licence
+(CC-BY-4.0): https://creativecommons.org/licenses/by/4.0/
+
+The files here are the int8 ONNX conversions published by the sherpa-onnx
+project (k2-fsa, https://github.com/k2-fsa/sherpa-onnx), copied unchanged.
+OASIS uses them to turn speech into text on this PC.

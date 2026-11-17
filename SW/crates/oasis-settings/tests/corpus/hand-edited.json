@@ -1,0 +1,20 @@
+{
+  "SchemaVersion": 1,
+  "Profiles": [
+    {
+      "Name": "Hand edited",
+      "ContextMatch": "chrome",
+      "ConfigProfiles": [
+        {
+          "Name": "Hand edited",
+          "ContextMatch": "*",
+          "Buttons": [
+            { "Type": "Shortcut", "Value": "Ctrl+C", "Label": "Copy" },
+            { "Type": "Shortcut", "Value": "Ctrl+V", "Label": "Paste" },
+            { "Type": "Shortcut", "Value": "Ctrl+Z", "Label": "Undo" }
+          ]
+        }
+      ]
+    }
+  ]
+}

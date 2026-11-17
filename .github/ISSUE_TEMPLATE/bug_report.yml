@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in OASIS does not work as it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for helping. Short is fine. The file beta/FEEDBACK.md in this repository explains the log files.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The steps you took, and what you saw. A screenshot or short recording helps.
+      placeholder: I held button 3 in Notepad and said "hello", and nothing was typed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: OASIS version
+      description: Shown at the bottom of the left menu, for example 0.1.5.
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: Windows 11 23H2
+    validations:
+      required: true
+  - type: dropdown
+    id: input
+    attributes:
+      label: Pad or keyboard
+      options:
+        - OASIS pad
+        - Keyboard keys (F1 F2 F3, or ` Tab Caps Lock)
+        - Both
+    validations:
+      required: true
+  - type: input
+    id: voice
+    attributes:
+      label: Microphone and voice model (only if voice is involved)
+      description: For example "Realtek mic, Balanced" (see Settings > Voice models).
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Press Win+R, open %APPDATA%\ProjectOASIS, and paste or attach crash.log, ble_log.txt, security.log or fixes.log if they exist. They hold no passwords or recordings.

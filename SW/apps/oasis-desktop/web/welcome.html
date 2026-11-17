@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Welcome to OASIS</title>
+  <!-- Before first paint: the saved theme, else Windows' (the same script as app.html). -->
+  <script>
+    (function () {
+      var t = null;
+      try { t = localStorage.getItem('oasis-theme'); } catch (e) {}
+      if (t !== 'light' && t !== 'dark') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      document.documentElement.dataset.theme = t;
+    })();
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="module" src="/src/welcome.js"></script>
+</body>
+</html>

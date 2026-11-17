@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "guide",
+  "description": "The first-run guide's caption panel, shown over other programs: it only listens for what to say. It takes no clicks and calls no window commands.",
+  "windows": ["guide"],
+  "permissions": ["core:default"]
+}

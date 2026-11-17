@@ -1,0 +1,37 @@
+[package]
+name = "oasis-desktop"
+description = "The OASIS desktop app: tray icon and status window around the engine. Tauri 2 with a plain static page (DECISIONS D7)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "oasis-desktop"
+path = "src/main.rs"
+
+# No `cargo tauri` CLI and no npm build step are needed: the page is static (ui/), so a plain
+# `cargo build -p oasis-desktop` makes the app. The installer is made by scripts/package-beta.ps1
+# (the Tauri CLI, which writes tauri-build in the form below).
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+oasis-engine = { path = "../../crates/oasis-engine" }
+oasis-core = { path = "../../crates/oasis-core" }
+oasis-settings = { path = "../../crates/oasis-settings" }
+oasis-platform = { path = "../../crates/oasis-platform" }
+oasis-voice = { path = "../../crates/oasis-voice" }
+tauri-plugin-updater = "2"
+
+[target.'cfg(windows)'.dependencies]
+oasis-win = { path = "../../crates/oasis-win" }
+
+
+
+[lints]
+workspace = true

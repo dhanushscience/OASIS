@@ -1,0 +1,6 @@
+This is a typing test that I will be doing for a long session. So I want to test it. Basically, what I'm doing here is I am typing through my voice and it is able to set it in a clean orientation.
+So, I want three things:
+1. One is better performance
+2. Second is quick latency
+3. Third is faster response time
+So these are the three things that I need. Then it should be able to send a mail on Thursday. For Shashank? No, Dhanush? No, wait, actually it is Shashank. Mm-hmm.

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "publisher": "Dhanush Science",
+    "shortDescription": "OASIS: a three-button interface, voice typing and voice commands for Windows",
+    "resources": {
+      "../../dist/stage/native/": "native/",
+      "../../extensions/oasis-youtube/": "extensions/oasis-youtube/"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "./installer-hooks.nsh"
+      }
+    },
+    "createUpdaterArtifacts": true
+  }
+}

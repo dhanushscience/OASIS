@@ -1,0 +1,22 @@
+[package]
+name = "oasis-ble"
+description = "Bluetooth LE transport for the OASIS pad (btleplug): scan, connect, Nordic UART notifications and writes, behind the blocking PadTransport trait."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# btleplug is async (tokio) and works on Windows, macOS and Linux. Its runtime lives inside
+# this crate and is hidden behind the blocking `PadTransport` trait, so nothing else in the
+# workspace needs an async runtime (DECISIONS D3, D14).
+[dependencies]
+oasis-platform = { path = "../oasis-platform" }
+oasis-protocol = { path = "../oasis-protocol" }
+oasis-core = { path = "../oasis-core" }
+btleplug = "0.13"
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+futures = "0.3"
+uuid = "1"
+
+[lints]
+workspace = true

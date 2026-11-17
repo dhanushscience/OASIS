@@ -1,0 +1,15 @@
+[package]
+name = "oasis-app"
+description = "OASIS application layer: hosts that run the pure reducers, own their timers and track capabilities."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# Like Oasis.Application (plain net8.0): no OS APIs here. It depends only on the pure crates.
+[dependencies]
+oasis-core = { path = "../oasis-core" }
+oasis-protocol = { path = "../oasis-protocol" }
+
+[lints]
+workspace = true

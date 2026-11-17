@@ -1,0 +1,31 @@
+# Copy this file to `OASIS RLS/.github/workflows/rust.yml` (GitHub only reads workflows at the repo root).
+# Builds and tests SW/ on Windows, macOS and Linux with zero warnings.
+name: rust
+
+on:
+  push:
+    paths: ["SW/**", ".github/workflows/rust.yml"]
+  pull_request:
+    paths: ["SW/**", ".github/workflows/rust.yml"]
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: SW
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets
+      - run: cargo test --workspace
+      - run: cargo run -p oasis-cli -- status

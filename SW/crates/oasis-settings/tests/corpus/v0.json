@@ -1,0 +1,31 @@
+{
+  "OverlayX": 10,
+  "OverlayY": 20,
+  "ShowOverlayLabels": false,
+  "OverlayAppearance": {
+    "IndicatorSpacing": 14,
+    "LabelSpacing": 8,
+    "LabelOpacity": 0.5
+  },
+  "Ai": {
+    "Model": "gemini-1.5-flash"
+  },
+  "Voice": {
+    "ModelFileName": "ggml-tiny.bin",
+    "LlmModelFileName": "qwen2.5-3b.gguf",
+    "IntentMode": 0
+  },
+  "Meetings": {
+    "GoogleClientSecret": "should-not-survive"
+  },
+  "Profiles": [
+    {
+      "Name": "Default",
+      "ContextMatch": "*",
+      "Buttons": [
+        { "Type": "Shortcut", "Value": "Ctrl+C", "Label": "Copy" },
+        { "Type": "Shortcut", "Value": "Ctrl+V", "Label": "Paste" }
+      ]
+    }
+  ]
+}

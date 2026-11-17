@@ -1,0 +1,38 @@
+/* The Settings pop-up's shared look: a group is one surface with a small heading; its rows are divided
+   by hairlines, name and hint on the left and the control on the right. Every section uses these, so
+   they feel like one screen. Scoped under `.dialog` so nothing leaks into the rest of the app. */
+
+.dialog .pane:not([hidden]) { display: flex; flex-direction: column; gap: 14px; }
+.dialog .pane[hidden] { display: none; }
+
+.dialog .group { padding: 4px 20px 6px; border: 1px solid var(--line); border-radius: var(--r-card); background: var(--surface); box-shadow: 0 1px 3px var(--shadow); }
+.dialog .ghead { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding-top: 6px; }
+.dialog .ghead .lab { font: 600 11px/1.3 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.dialog .gh { margin: 0 0 6px; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 72ch; }
+.dialog .srow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px 24px; padding: 13px 0; border-top: 1px solid var(--hair); }
+.dialog .srow:has(> .ico) { grid-template-columns: 36px minmax(0, 1fr) auto; column-gap: 14px; }
+.dialog .ghead + .srow, .dialog .gh + .srow { border-top: 0; }
+.dialog .rname { font-size: 14px; font-weight: 600; color: var(--ink); }
+.dialog .srow .hint { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.dialog .ctl { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+
+/* segmented choice: the chosen one is a raised white pill */
+.dialog .seg { display: flex; gap: 2px; padding: 3px; border-radius: var(--r-pill); background: var(--hair); }
+.dialog .seg button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 14px; border: 0; border-radius: var(--r-pill); background: transparent; color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap;
+  transition: background-color .2s var(--ease), color .2s var(--ease); }
+.dialog .seg button.on { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-chosen); }
+
+/* buttons */
+.dialog .pillbtn { height: 32px; padding: 0 14px; border-radius: var(--r-pill); border: 1px solid var(--line); background: transparent; color: var(--ink); font: 600 12px var(--sans); white-space: nowrap; }
+.dialog .pillbtn.dark { border-color: var(--ink); background: var(--ink); color: var(--inv); }
+.dialog .pillbtn.danger { border-color: var(--bad); background: var(--bad); color: #fff; }
+.dialog .pillbtn:disabled { opacity: .45; cursor: default; }
+
+/* a small status chip */
+.dialog .chip { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--r-pill); background: var(--hair); color: var(--ink); font: 500 12px var(--mono); }
+.dialog .chip.dark { background: var(--ink); color: var(--inv); font-weight: 600; letter-spacing: .04em; }
+
+@media (max-width: 760px) {
+  .dialog .srow { grid-template-columns: minmax(0, 1fr); }
+  .dialog .ctl { justify-content: flex-start; }
+}

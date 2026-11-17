@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    env:
+      RUSTFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: SW
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: SW/apps/oasis-desktop/web/package-lock.json
+      # Web first: the Tauri crate embeds the built UI folder.
+      - name: Web tests and build
+        working-directory: SW/apps/oasis-desktop/web
+        run: |
+          npm ci
+          npm test
+          npm run build
+      # The speech engine (sherpa-onnx) is loaded at run time, so no DLLs are needed to build or test.
+      # If that ever changes, replace --workspace with the crates that do not need them (for example -p oasis-core -p oasis-protocol).
+      - name: Rust tests
+        working-directory: SW
+        run: cargo test --workspace

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "hud",
+  "description": "The on-screen HUD (listening pill and close question): listen to engine events.",
+  "windows": ["hud"],
+  "permissions": ["core:default"]
+}

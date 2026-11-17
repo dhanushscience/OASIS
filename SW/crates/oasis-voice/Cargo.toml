@@ -1,0 +1,23 @@
+[package]
+name = "oasis-voice"
+description = "Microphone capture and the on-device speech-to-text engine (sherpa-onnx, loaded at run time). With oasis-win and oasis-dpapi, the only crates allowed to use unsafe."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+oasis-models = { path = "../oasis-models" }
+cpal = "0.15"
+libloading = "0.8"
+
+# DECISIONS D13: unsafe is confined to OS/native wrapper crates, every block with a SAFETY note.
+[lints.rust]
+unsafe_code = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[dev-dependencies]
+oasis-core = { path = "../oasis-core" }

@@ -1,0 +1,18 @@
+S1-mini (OASIS cleanup fine-tune)
+
+This file is S1-mini by Superwhisper, fine-tuned by the OASIS project (LoRA, then converted to GGUF Q4_K_M)
+to clean up speech-to-text text. It is a modified version of the model below; this notice states the change,
+as the Apache License, Version 2.0 asks.
+
+Original: S1-mini-GGUF, Copyright 2026 Superwhisper
+S1-mini is itself a derivative of Qwen3-0.6B, Copyright 2024 Alibaba Cloud, licensed under the Apache
+License, Version 2.0. The LICENSE file next to this one is S1-mini's own, unchanged.
+
+Any use, distribution, or integration of this model, whether unmodified or as part of a derivative work or
+product, must continue to identify it by its original name, "S1-mini" by "Superwhisper", using that exact
+capitalization. This restates the ADDITIONAL TERM of the LICENSE file, which is the operative text.
+
+Fine-tuning data: pairs of raw speech-to-text and cleaned text written by the OASIS project, and public pairs
+that may have been added from
+  - hasanchadaram/dictation-cleanup, licensed Apache-2.0
+  - MagicNoThief/handy-dictation-editing, licensed CC-BY-4.0 (https://huggingface.co/datasets/MagicNoThief/handy-dictation-editing)
