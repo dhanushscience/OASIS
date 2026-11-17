@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="SW/OASIS_LOGO_DARK.png">
-  <img alt="OASIS" src="SW/OASIS_LOGO_LIGHT.png" width="300">
+  <source media="(prefers-color-scheme: dark)" srcset="SW/OASIS_LOGO_LIGHT.png">
+  <img alt="OASIS" src="SW/OASIS_LOGO_DARK.png" width="300">
 </picture>
 
 ### Three buttons. Every app. Your voice.
