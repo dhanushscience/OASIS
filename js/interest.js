@@ -3,7 +3,7 @@
  * Star count is read from the public GitHub API when available.
  */
 
-const REPO = 'dhanushscience/PROJECT-OASIS';
+const REPO = 'dhanushscience/PROJECT-OASIS'; // shows stars for the repo linked in the footer
 const REPO_URL = `https://github.com/${REPO}`;
 
 function setNote(text, kind = '') {
@@ -39,20 +39,6 @@ async function fetchStarCount() {
 }
 
 function initStarCta() {
-  const btn = document.getElementById('end-star-btn');
-  if (btn) {
-    btn.href = REPO_URL;
-    btn.addEventListener('click', () => {
-      setNote('Thanks. Star the repo so you are first in line at launch.', 'ok');
-      // Refresh count after they return from GitHub
-      window.setTimeout(() => {
-        fetchStarCount().then((n) => {
-          if (n != null) updateStarCount(n);
-        });
-      }, 4000);
-    });
-  }
-
   fetchStarCount().then((n) => {
     if (n != null) updateStarCount(n);
   });

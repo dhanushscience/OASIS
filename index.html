@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>PROJECT OASIS</title>
-  <meta name="description" content="PROJECT OASIS: a context-aware macro pad with KiCad PCB, Fusion enclosure, ESP-IDF BLE firmware, and a Windows companion. Built in 149 hours by Dhanush Science.">
+  <title>OASIS | Three buttons, every app, your voice</title>
+  <meta name="description" content="OASIS is a three-button pad and a free Windows app. Buttons change with the app you are in, and you can talk to it. Download the public beta.">
   <link rel="icon" href="assets/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" href="assets/app-icon.png" sizes="230x230">
   <link rel="apple-touch-icon" href="assets/app-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=111">
+  <link rel="stylesheet" href="css/styles.css?v=112">
 </head>
 <body>
   <div class="blueprint-bg" aria-hidden="true">
@@ -26,9 +26,39 @@
       <img src="assets/logo.png" alt="PROJECT OASIS" width="140" height="48">
     </a>
     <div class="nav-side nav-side-right">
-      <a href="https://github.com/dhanushscience/PROJECT-OASIS" class="nav-cta mono" target="_blank" rel="noopener"><span class="nav-cta-full">GitHub //</span><span class="nav-cta-short">GH</span></a>
+      <a href="https://github.com/dhanushscience/OASIS-releases/releases/latest/download/OASIS-setup.exe" class="nav-cta mono" data-dl><span class="nav-cta-full">Download //</span><span class="nav-cta-short">Get</span></a>
     </div>
   </header>
+
+  <main class="hero" id="top">
+    <div class="hero-copy">
+      <p class="story-label mono">PUBLIC BETA // WINDOWS 10 + 11</p>
+      <h1 class="hero-title">Three buttons.<br>Every app.<br>Your voice.</h1>
+      <p class="hero-sub">OASIS is a small pad with three buttons and a free Windows app. The buttons change with the app you are in. Hold one and talk: your words are typed, or run as a command.</p>
+      <div class="hero-actions">
+        <a class="btn btn-primary btn-xl mono" href="https://github.com/dhanushscience/OASIS-releases/releases/latest/download/OASIS-setup.exe" data-dl>Download for Windows //</a>
+        <a class="btn btn-ghost mono" href="https://github.com/dhanushscience/OASIS-releases#readme" target="_blank" rel="noopener">Install guide</a>
+      </div>
+      <p class="hero-meta mono" id="hero-meta">Free beta &middot; 11 MB installer &middot; Windows 10 or 11, 64-bit</p>
+      <p class="hero-note">No pad yet? The three buttons work from your keyboard too.</p>
+    </div>
+    <div class="hero-visual" aria-hidden="true">
+      <svg viewBox="0 0 430 320" class="pad-svg" role="img">
+        <rect x="20" y="40" width="250" height="240" rx="26" class="pad-body"/>
+        <circle cx="145" cy="105" r="30" class="pad-key" style="--i:0"/>
+        <circle cx="145" cy="170" r="30" class="pad-key" style="--i:1"/>
+        <circle cx="145" cy="235" r="30" class="pad-key" style="--i:2"/>
+        <g class="bars">
+          <rect x="290" y="80" width="120" height="34" rx="17" class="bar" style="--i:0"/><text x="350" y="102" class="bar-t">Run build</text>
+          <rect x="290" y="145" width="120" height="34" rx="17" class="bar" style="--i:1"/><text x="350" y="167" class="bar-t">Talk</text>
+          <rect x="290" y="210" width="120" height="34" rx="17" class="bar" style="--i:2"/><text x="350" y="232" class="bar-t">New tab</text>
+        </g>
+        <path d="M270 97H290M270 162H290M270 227H290" class="pad-link"/>
+      </svg>
+      <p class="hero-cap mono">The overlay shows what each button does right now</p>
+    </div>
+    <a href="#workbench" class="hero-scroll mono">See how it was built &darr;</a>
+  </main>
 
   <div class="workbench" id="workbench">
     <section class="workbench-stage" id="workbench-stage">
@@ -49,17 +79,11 @@
           </div>
 
           <div class="end-cta emboss" id="end-cta" hidden>
-            <p class="story-label mono">COMING SOON</p>
-            <h2 class="end-title">Launching soon.</h2>
-            <p class="end-body">Star the GitHub repo to show interest. When OASIS launches, people who starred get first access.</p>
-            <a
-              class="btn btn-primary mono end-star-btn"
-              id="end-star-btn"
-              href="https://github.com/dhanushscience/PROJECT-OASIS"
-              target="_blank"
-              rel="noopener"
-            >Star on GitHub //</a>
-            <p class="interest-note mono" id="interest-note">Open source if the response is there.</p>
+            <p class="story-label mono">PUBLIC BETA</p>
+            <h2 class="end-title">Try it today.</h2>
+            <p class="end-body">The Windows app is free. Install it, and press the three buttons from your keyboard until your pad arrives.</p>
+            <a class="btn btn-primary mono end-star-btn" id="end-star-btn" href="https://github.com/dhanushscience/OASIS-releases/releases/latest/download/OASIS-setup.exe" data-dl>Download for Windows //</a>
+            <p class="interest-note mono" id="interest-note">Star the repo to follow along.</p>
             <p class="interest-count mono" id="interest-count" hidden></p>
           </div>
         </div>
@@ -130,7 +154,7 @@
       <a href="#" class="footer-brand">
         <img src="assets/logo.png" alt="PROJECT OASIS" class="footer-logo" width="240" height="76">
       </a>
-      <p class="footer-copy mono">© 2026 PROJECT OASIS · V1.0.0</p>
+      <p class="footer-copy mono">© 2026 PROJECT OASIS</p>
       <div class="footer-right">
         <img src="assets/designed-by.png" alt="Designed by Dhanush Science" class="footer-designed" width="320" height="22">
       </div>
@@ -147,9 +171,9 @@
     }
   }
   </script>
-  <script type="module" src="js/story.js?v=111"></script>
-  <script type="module" src="js/assembly.js?v=111"></script>
-  <script type="module" src="js/interest.js?v=111"></script>
+  <script type="module" src="js/story.js?v=112"></script>
+  <script type="module" src="js/assembly.js?v=112"></script>
+  <script type="module" src="js/interest.js?v=112"></script>
   <script src="js/main.js"></script>
 </body>
 </html>
