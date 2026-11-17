@@ -424,6 +424,7 @@ fn boundary(s: &str, keep: &[String]) -> Option<usize> {
 }
 
 /// A polished sentence is kept only if it keeps the meaning and every Dictionary term it had.
+#[cfg(test)]
 fn acceptable(sentence: &str, polished: &str, keep: &[String]) -> bool {
     rejection(sentence, polished, keep).is_none()
 }

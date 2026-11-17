@@ -53,6 +53,18 @@ A keyboard shortcut means one thing in VS Code and another in YouTube. A pad wit
 - **Insights.** Optional, local history of what you dictated, with the audio, so you can see where it went wrong. Never uploaded.
 - **No pad yet?** The three buttons work from your keyboard.
 
+## Try saying
+
+Hold a button, say it, let go. The same key types or acts, depending on what you say.
+
+| Say | What happens |
+|---|---|
+| "my name is Dhanush" | Typed into the box you are in, with slips tidied up |
+| "open Spotify" | Opens the app |
+| "open a new window in Chrome" | A new Chrome window, not the last one |
+| "new tab" | A new tab in your browser |
+| Press button 1 in Chrome | Your own action: a site, a shortcut or a short series of steps |
+
 ## Get it
 
 1. **[Download the installer](https://github.com/dhanushscience/OASIS-releases/releases/latest/download/OASIS-setup.exe)** (about 11 MB).
