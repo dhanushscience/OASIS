@@ -49,7 +49,15 @@ that way).
 
 | File | Contents |
 |---|---|
-| `src/engine.rs` | `start`, `EngineHandle`, `EngineParts`, `EngineConfig`, `BridgeConfig`, `ForegroundProbe`, the loop, the worker |
+| `src/engine.rs` | The loop (`run_loop`) and its small helpers; re-exports the public items of `engine/` |
+| `src/engine/parts.rs` | What the engine is given: `EngineParts`, `EngineConfig`, `BridgeConfig`, `ForegroundProbe`, `BackendContext`, `BackendFactory`, `EngineError`, `ChangeError` |
+| `src/engine/handle.rs` | The shared state (`Shared`), `EngineHandle`, `start` |
+| `src/engine/dispatch.rs` | A recognised gesture: the label peek, `dispatch`, `plan` |
+| `src/engine/worker.rs` | The two action workers (`Jobs`, `spawn_worker`) and the meeting, Spotify and Quick Launch runners |
+| `src/engine/spoken.rs` | A spoken phrase (`handle_heard`): typed, run, asked on the pad or refused; spoken alarms, timers, reminders |
+| `src/engine/dictation.rs` | Dictation: cleanup, polish, trace log, talk cues, `paste_typed`, `dictation_style` |
+| `src/engine/bridge.rs` | The browser-extension socket (`sync_bridge`) and preferences |
+| `src/engine/layouts.rs` | Spoken layouts: save and restore open windows as a Quick Launch setup |
 | `src/inbox.rs` | What wakes the loop (`Input`), the pad thread and the front thread |
 | `src/events.rs` | `EngineEvent`, `Press`, `EngineStatus`, `FrontApp` (all `Serialize`, for the page) |
 | `src/defaults.rs` | The real Windows parts (`windows::parts()`), `detect_paths` |
@@ -97,7 +105,7 @@ voice, AI. (The overlay and the YouTube bridge are in; see the notes above and b
   profile matcher chooses that set. `crates/oasis-platform/examples/panel_probe.rs` prints it live.
 
 ## Interface
-- `src/engine.rs`: `start(config, parts, on_event) -> EngineHandle` (`stop`, `status`, `set_live`, `change`, `reload_settings`, `accept_edited_settings`, `settings`), `EngineParts<T: PadTransport>`, `EngineConfig`, `BridgeConfig`, `BackendContext`, `BackendFactory`, `ForegroundProbe`, `EngineError`, `ChangeError`.
+- `src/engine.rs` (items in `src/engine/handle.rs`, `src/engine/parts.rs`): `start(config, parts, on_event) -> EngineHandle` (`stop`, `status`, `set_live`, `change`, `reload_settings`, `accept_edited_settings`, `settings`), `EngineParts<T: PadTransport>`, `EngineConfig`, `BridgeConfig`, `BackendContext`, `BackendFactory`, `ForegroundProbe`, `EngineError`, `ChangeError`.
 - `src/events.rs`: `EngineEvent`, `Press`, `EngineStatus`, `FrontApp`.
 - `src/defaults.rs`: `windows` module (real parts), `detect_paths`.
 - `src/lib.rs`: modules `activity`, `defaults`, `engine`, `events`, `groq`, `history`, `meetings`, `polish`, `model_download`, `quick_launch`, `reminders`, `self_check`, `spotify`, `use_counts`, `voice`.
