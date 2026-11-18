@@ -2,6 +2,11 @@
 
 All notable changes to OASIS. The format follows [Keep a Changelog](https://keepachangelog.com). Full notes: [beta/RELEASE-NOTES.md](beta/RELEASE-NOTES.md).
 
+## [0.1.8]
+
+### Changed
+- The project is now at github.com/dhanushscience/PROJECT-OASIS, and the website at dhanushscience.github.io/PROJECT-OASIS. Updates and models come from there. Nothing to do on your side.
+
 ## [0.1.7]
 
 ### Changed

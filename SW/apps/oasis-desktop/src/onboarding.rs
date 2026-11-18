@@ -26,7 +26,7 @@ pub const WELCOME: &str = "welcome";
 pub const PANEL: &str = "guide";
 const PANEL_SIZE: (f64, f64) = (520.0, 136.0);
 /// The website button 2 opens during the first press, and only then.
-const SITE: &str = "https://dhanushscience.github.io/OASIS/";
+const SITE: &str = "https://dhanushscience.github.io/PROJECT-OASIS/";
 const GROQ_KEYS: &str = "https://console.groq.com/keys";
 const PROFILE: &str = "Default";
 /// Button 2, counted from 0.

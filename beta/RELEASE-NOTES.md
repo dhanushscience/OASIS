@@ -1,5 +1,9 @@
 # What's new
 
+## 0.1.8
+
+- OASIS's home is now github.com/dhanushscience/PROJECT-OASIS, with the website at dhanushscience.github.io/PROJECT-OASIS. Updates and voice models come from there. Nothing to do on your side.
+
 ## 0.1.7
 
 - OASIS now updates and downloads its voice models from one place, github.com/dhanushscience/OASIS. Nothing to do on your side: your models stay where they are.

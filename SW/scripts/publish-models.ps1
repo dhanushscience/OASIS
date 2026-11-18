@@ -13,7 +13,7 @@ param(
     [Parameter(Mandatory = $true)][string]$LlamaZip,
     [Parameter(Mandatory = $true)][string]$LlamaLicense,
     [string]$Tag = "models-2026.11",
-    [string]$Repo = "dhanushscience/OASIS",
+    [string]$Repo = "dhanushscience/PROJECT-OASIS",
     [string]$Stage = "$env:TEMP\oasis-models-stage",
     [switch]$Publish
 )

@@ -1,10 +1,10 @@
-// Written by scripts/publish-models.ps1; do not edit by hand. The files of release models-2026.11 in dhanushscience/OASIS,
+// Written by scripts/publish-models.ps1; do not edit by hand. The files of release models-2026.11 in dhanushscience/PROJECT-OASIS,
 // with the SHA-256 each download must match (docs/VOICE_MODEL_SETUP.md section 4.3).
 
 /// The release the files below come from.
 pub const RELEASE: &str = "models-2026.11";
 /// Where they are downloaded from: this, then the asset name.
-pub const BASE_URL: &str = "https://github.com/dhanushscience/OASIS/releases/download/models-2026.11/";
+pub const BASE_URL: &str = "https://github.com/dhanushscience/PROJECT-OASIS/releases/download/models-2026.11/";
 
 /// Every file, in the order they are downloaded.
 pub const FILES: &[ModelFile] = &[
