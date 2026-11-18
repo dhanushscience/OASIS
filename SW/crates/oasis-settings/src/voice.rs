@@ -38,6 +38,8 @@ pub struct VoiceSettings {
     pub language: String,
     /// Keep each dictation (its recording and text) on this PC, for the Insights history. Off by default.
     pub keep_history: bool,
+    /// Write each dictation's raw and cleaned text to `dictation-trace.log`, for troubleshooting. Off by default.
+    pub keep_trace: bool,
     /// Type the dictation where the cursor is. On by default; off only transcribes (and keeps it).
     pub paste_dictation: bool,
     /// Follow the pasted dictation with "[typed using project OASIS]". Off by default.
@@ -75,6 +77,7 @@ impl VoiceSettings {
             groq_fallback_to_local: voice.and_then(|v| v.get("GroqFallbackToLocal")).and_then(Value::as_bool).unwrap_or(true),
             language: text("Language").filter(|l| !l.is_empty()).unwrap_or_else(|| "en".to_string()),
             keep_history: voice.and_then(|v| v.get("KeepHistory")).and_then(Value::as_bool).unwrap_or(false),
+            keep_trace: voice.and_then(|v| v.get("KeepDictationTrace")).and_then(Value::as_bool).unwrap_or(false),
             paste_dictation: voice.and_then(|v| v.get("PasteDictation")).and_then(Value::as_bool).unwrap_or(true),
             paste_tag: voice.and_then(|v| v.get("PasteTag")).and_then(Value::as_bool).unwrap_or(false),
             sounds: voice.and_then(|v| v.get("Sounds")).and_then(Value::as_bool).unwrap_or(true),
@@ -124,6 +127,12 @@ mod tests {
     fn keeping_the_history_is_off_until_the_user_turns_it_on() {
         assert!(!VoiceSettings::from(&Settings::default()).keep_history);
         assert!(VoiceSettings::from(&settings(json!({ "Voice": { "KeepHistory": true } }))).keep_history);
+    }
+
+    #[test]
+    fn keeping_the_dictation_trace_is_off_until_the_user_turns_it_on() {
+        assert!(!VoiceSettings::from(&Settings::default()).keep_trace);
+        assert!(VoiceSettings::from(&settings(json!({ "Voice": { "KeepDictationTrace": true } }))).keep_trace);
     }
 
     #[test]

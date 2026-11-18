@@ -547,6 +547,15 @@ fn specs(ctx: &FieldContext, settings: &Settings) -> Vec<Spec> {
             kind: Kind::Toggle,
         },
         Spec {
+            id: "voice.keep_trace",
+            section: "voice",
+            label: "Keep a dictation trace (for troubleshooting)",
+            hint: "Writes what you said, before and after cleanup, to a log file on this PC. Turn it off when you are done; nothing is sent anywhere.",
+            place: Place::In("Voice", "KeepDictationTrace"),
+            default: json!(false),
+            kind: Kind::Toggle,
+        },
+        Spec {
             id: "meetings.reminders",
             section: "meetings",
             label: "Remind me before a meeting",

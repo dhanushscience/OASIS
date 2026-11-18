@@ -462,7 +462,7 @@ impl ActionBackend for WindowsActions {
     fn paste_text(&mut self, text: &str) -> bool {
         use oasis_win::clipboard;
         let previous = clipboard::get_text();
-        if clipboard::set_text(text).is_err() {
+        if clipboard::set_text_private(text).is_err() {
             return self.input.type_text(text).is_ok();
         }
         let ours = clipboard::sequence();

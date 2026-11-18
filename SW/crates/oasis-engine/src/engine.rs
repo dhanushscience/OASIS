@@ -1657,13 +1657,14 @@ fn dictation_text(shared: &Shared, settings: &Settings, verified: bool, heard: &
     if keep_on_clipboard && verified && shared.live.load(Ordering::SeqCst) {
         let _ = oasis_win::clipboard::set_text(&typed);
     }
-    write_dictation_trace(shared, style, raw, &trace, &typed);
+    if VoiceSettings::from(settings).keep_trace {
+        write_dictation_trace(shared, style, raw, &trace, &typed);
+    }
     show_typed(shared, settings, verified, &text).then_some(typed)
 }
 
 /// One block per dictation in `dictation-trace.log`: the speech model's raw text, the text after
 /// every cleanup stage, and exactly what is pasted. Line breaks are written as `\n` inside quotes.
-// shortcut: always on and holds what was said; make it a Voice setting (off by default) before release.
 fn write_dictation_trace(shared: &Shared, style: Style, raw: &str, trace: &[(String, String)], typed: &str) {
     let mut block = format!("dictation, style {style:?}\n  {:<16} {raw:?}", "1 raw (STT)");
     let mut last = raw.trim().to_string();

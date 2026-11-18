@@ -1,9 +1,9 @@
 //! Put text on the Windows clipboard. Port of `TrySetClipboardText` in `Services/ActionExecutor.cs`.
 //!
 //! Dictation is pasted (clipboard, then Ctrl+V) so the whole text lands at once, however long it
-//! is and whatever the app does with typed characters. What OASIS puts there is kept out of
-//! Windows clipboard history (Win+V) and cloud clipboard sync, and the user's own text is read
-//! first so it can be put back (`docs/VOICE_DECISIONS.md` V8, step 7).
+//! is and whatever the app does with typed characters. The dictation is marked private (`set_text_private`)
+//! so it stays out of Windows clipboard history (Win+V) and cloud clipboard sync, and the user's own
+//! text is read first so it can be put back (`docs/VOICE_DECISIONS.md` V8, step 7).
 
 #![allow(unsafe_code)]
 
@@ -57,16 +57,26 @@ pub fn clipboard_units(text: &str) -> Vec<u16> {
 }
 
 /// Formats that tell Windows not to keep this text in clipboard history or sync it to the cloud.
-/// Their value is a DWORD 0.
-const PRIVATE_FORMATS: [&str; 2] = ["CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"];
+/// Their value is a DWORD 0. The exclude format only needs to be present.
+const PRIVATE_FORMATS: [&str; 3] = ["ExcludeClipboardContentFromMonitorProcessing", "CanIncludeInClipboardHistory", "CanUploadToCloudClipboard"];
 
-/// Replace the clipboard with `text`, kept out of clipboard history. Tries a few times: another
-/// program may have it open for a moment (clipboard managers do).
+/// Replace the clipboard with `text`. Tries a few times: another program may have it open for a
+/// moment (clipboard managers do).
 pub fn set_text(text: &str) -> Result<(), ClipboardError> {
+    set_text_with(text, &[])
+}
+
+/// Replace the clipboard with `text`, marked so clipboard history and cloud sync skip it. Used for
+/// dictation, which is the user's speech and should not sit in Win+V history.
+pub fn set_text_private(text: &str) -> Result<(), ClipboardError> {
+    set_text_with(text, &PRIVATE_FORMATS)
+}
+
+fn set_text_with(text: &str, formats: &[&str]) -> Result<(), ClipboardError> {
     let units = clipboard_units(text);
     let mut last = ClipboardError::Busy(0);
     for _ in 0..10 {
-        match try_set(&units) {
+        match try_set(&units, formats) {
             Ok(()) => return Ok(()),
             Err(e @ ClipboardError::Busy(_)) => {
                 last = e;
@@ -78,7 +88,7 @@ pub fn set_text(text: &str) -> Result<(), ClipboardError> {
     Err(last)
 }
 
-fn try_set(units: &[u16]) -> Result<(), ClipboardError> {
+fn try_set(units: &[u16], formats: &[&str]) -> Result<(), ClipboardError> {
     let bytes = units.len() * 2;
     // SAFETY: a null owner window is allowed; the clipboard is closed on every path below.
     if unsafe { OpenClipboard(std::ptr::null_mut()) } == 0 {
@@ -116,7 +126,7 @@ fn try_set(units: &[u16]) -> Result<(), ClipboardError> {
             return Err(ClipboardError::Refused(code));
         }
         // Best effort: an older Windows without clipboard history ignores these formats.
-        for name in PRIVATE_FORMATS {
+        for name in formats {
             set_dword_format(name, 0);
         }
         Ok(())
