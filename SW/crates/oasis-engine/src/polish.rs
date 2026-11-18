@@ -80,6 +80,20 @@ fn control(style: oasis_core::speech::style::Style) -> String {
     format!("[Styling: {tone}] [Structure: {structure}] [Context: {context}]")
 }
 
+/// `control` plus the user's own Dictionary words (those added with no "heard as"), so the model
+/// spells them as given. Part of the control text, so the polish cache follows the Dictionary.
+fn with_terms(control: String, glossary: &[oasis_core::speech::GlossaryEntry]) -> String {
+    let mut terms = String::new();
+    for g in glossary.iter().filter(|g| g.spoken == g.canonical) {
+        if terms.len() + g.canonical.len() > 300 {
+            break; // shortcut: a fixed cap keeps the prompt short; raise it if testers keep long lists
+        }
+        terms.push_str(if terms.is_empty() { "" } else { ", " });
+        terms.push_str(&g.canonical);
+    }
+    if terms.is_empty() { control } else { format!("{control} [Terms: {terms}]") }
+}
+
 /// The known value of `Voice.<key>`, or the first one.
 fn pick(voice: Option<&serde_json::Value>, key: &str, known: &[&'static str]) -> &'static str {
     voice.and_then(|v| v.get(key)).and_then(|v| v.as_str()).and_then(|t| known.iter().find(|k| **k == t)).copied().unwrap_or(known[0])
@@ -521,7 +535,7 @@ pub fn apply(rules: CleanupResult, context: &CleanupContext, keep: &[String]) ->
         return rules;
     };
     let deadline = started + budget();
-    let control = control(context.style);
+    let control = with_terms(control(context.style), &context.glossary);
     let mut unchanged = false;
     let mut llm = |text: &str, _raw: &str, _c: &CleanupContext| -> Option<String> {
         let lines: Vec<Vec<&str>> = text.split('\n').map(|line| sentences(line, keep)).collect();
@@ -586,7 +600,7 @@ pub fn prewarm(raw_so_far: &str, settings: &Settings, paragraphs: &[String]) {
         context.style = style;
         context.glossary = voice.dictation_glossary.iter().map(|(s, c)| oasis_core::speech::GlossaryEntry::new(s, c)).collect();
         let keep: Vec<String> = voice.dictation_glossary.iter().map(|(_, c)| c.clone()).collect();
-        let control = control(style);
+        let control = with_terms(control(style), &context.glossary);
         let text = cleanup_pipeline::run(&CleanupRequest::new(&raw, context)).corrected_text;
         let text = oasis_core::speech::layout::place_paragraphs(&text, &paragraphs);
         for line in text.split('\n') {

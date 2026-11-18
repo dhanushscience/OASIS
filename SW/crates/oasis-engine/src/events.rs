@@ -61,6 +61,9 @@ pub enum EngineEvent {
     /// Waiting for the user: button 1 runs it, button 2 cancels.
     /// `close`: the app (or "this window") a close command would shut, so the overlay can ask it in words.
     Confirm { summary: String, close: Option<String> },
+    /// A new microphone was plugged in: button 1 uses it, button 2 keeps the current one.
+    /// Ends with `ConfirmEnd`.
+    MicOffer { name: String },
     /// The question above was answered or timed out.
     ConfirmEnd { approved: bool },
     /// What was heard. `typed` is whether it was typed into the focused app (not in preview).

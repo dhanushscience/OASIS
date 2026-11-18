@@ -615,9 +615,10 @@ mod tests {
         let r = run("set volume to 40 percent");
         assert!(r.success, "{r:?}");
         assert_eq!(r.label, "VOLUME 40%");
-        let steps: Vec<(String, String)> = r.action.unwrap().steps.into_iter().map(|s| (s.kind, s.value)).collect();
-        assert_eq!(steps.len(), 70);
-        assert!(!super::super::safety::evaluate(&steps).blocked);
+        assert_eq!(r.action, Some(action("Volume", "40")));
+        let steps = [("Volume".to_string(), "40".to_string())];
+        let verdict = super::super::safety::evaluate(&steps);
+        assert!(!verdict.blocked && !verdict.requires_confirmation);
     }
 
     #[test]

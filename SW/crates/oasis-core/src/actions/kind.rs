@@ -34,7 +34,7 @@ macro_rules! kinds {
 kinds! {
     Shortcut, OpenUrl, LaunchApp, CloseApp, CloseWindow, WindowCommand, WindowSplit, WindowLayout,
     RunScript, AutoHotkey, MouseClick, PasteText, OpenSettings, JoinMeeting, QuickLaunch, LockPc,
-    Chime, PlaySound, Radio, Brightness, Theme, Delay, Automation, Reminder, CancelReminders,
+    Chime, PlaySound, Radio, Brightness, Volume, Theme, Delay, Automation, Reminder, CancelReminders,
     SpotifyPlay, SpotifyControl,
     /// Removed step kind; an old file's step is skipped, not failed.
     WaitRelease,

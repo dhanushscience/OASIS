@@ -217,6 +217,11 @@ impl EngineHandle {
         self.shared.reload_from_disk()
     }
 
+    /// A microphone was plugged in: ask on the pad and the HUD whether to use it.
+    pub fn offer_microphone(&self, name: &str) {
+        let _ = self.shared.inbox.send(Input::MicOffer(name.to_string()));
+    }
+
     /// Hold the keyboard buttons back, or let them go again, without touching the saved setting.
     /// The loop takes it up the way it takes up new settings.
     pub fn hold_keys(&self, held: bool) {

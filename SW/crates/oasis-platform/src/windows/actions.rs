@@ -535,6 +535,7 @@ impl ActionBackend for WindowsActions {
                 std::thread::spawn(move || run_powershell(&script, "Brightness change", &security));
                 true
             }
+            c if c.strip_prefix("volume:").is_some_and(is_brightness_arg) => oasis_win::audio::set_volume(&c["volume:".len()..]),
             _ => false,
         }
     }

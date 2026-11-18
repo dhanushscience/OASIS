@@ -94,7 +94,7 @@ pub fn is_focus_free(action: &ButtonAction) -> bool {
         return true;
     }
     match action.kind() {
-        ActionKind::Reminder | ActionKind::CancelReminders | ActionKind::Chime | ActionKind::PlaySound | ActionKind::Radio | ActionKind::Brightness => true,
+        ActionKind::Reminder | ActionKind::CancelReminders | ActionKind::Chime | ActionKind::PlaySound | ActionKind::Radio | ActionKind::Brightness | ActionKind::Volume => true,
         ActionKind::Shortcut => Chord::parse(&action.value).is_ok_and(|c| {
             !c.keys.is_empty()
                 && c.keys.iter().all(|k| matches!(k, VolumeUp | VolumeDown | VolumeMute | PlayPause | NextTrack | PrevTrack | MediaStop))
@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn only_window_independent_actions_get_the_second_lane() {
         let a = |kind: &str, value: &str| ButtonAction { kind: kind.into(), value: value.into(), steps: vec![] };
-        for free in [("Shortcut", "VolumeUp"), ("Shortcut", "MediaPlayPause"), ("Shortcut", "Mute"), ("SpotifyPlay", ""), ("Reminder", "timer|1|"), ("CancelReminders", "all"), ("Chime", "1"), ("Radio", "x"), ("Brightness", "50")] {
+        for free in [("Shortcut", "VolumeUp"), ("Shortcut", "MediaPlayPause"), ("Shortcut", "Mute"), ("SpotifyPlay", ""), ("Reminder", "timer|1|"), ("CancelReminders", "all"), ("Chime", "1"), ("Radio", "x"), ("Brightness", "50"), ("Volume", "50")] {
             assert!(is_focus_free(&a(free.0, free.1)), "{free:?}");
         }
         for ordered in [("Shortcut", "Ctrl+V"), ("Shortcut", "Ctrl+VolumeUp"), ("Shortcut", ""), ("LaunchApp", "word"), ("PasteText", "hi"), ("Automation", ""), ("Delay", "5")] {

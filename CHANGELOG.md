@@ -2,6 +2,12 @@
 
 All notable changes to OASIS. The format follows [Keep a Changelog](https://keepachangelog.com). Full notes: [beta/RELEASE-NOTES.md](beta/RELEASE-NOTES.md).
 
+## [0.1.6]
+
+### Changed
+- Voice commands understand spoken numbers; a failed command is never typed.
+- Administrator mode is only turned on when OASIS is installed under Program Files, so other programs can't borrow its administrator rights.
+
 ## [0.1.5]
 
 ### Added

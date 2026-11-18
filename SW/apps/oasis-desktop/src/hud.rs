@@ -26,6 +26,7 @@ enum Mode {
     Ready = 3,
     Close = 4,
     Learn = 5,
+    Mic = 6,
 }
 static MODE: AtomicU8 = AtomicU8::new(Mode::Hidden as u8);
 
@@ -58,6 +59,7 @@ impl Mode {
             Mode::Ready => (260.0, 64.0),
             Mode::Close | Mode::Hidden => (480.0, 90.0),
             Mode::Learn => (340.0, 130.0),
+            Mode::Mic => (480.0, 90.0),
         }
     }
 }
@@ -102,7 +104,7 @@ pub fn end_learn<R: Runtime>(app: &AppHandle<R>) {
 
 /// React to an engine event: show, move or hide the window. The page reacts to the same event itself.
 pub fn on_engine_event<R: Runtime>(app: &AppHandle<R>, event: &oasis_engine::EngineEvent) {
-    use oasis_engine::EngineEvent::{Confirm, ConfirmEnd, Voice};
+    use oasis_engine::EngineEvent::{Confirm, ConfirmEnd, MicOffer, Voice};
     let wanted = match event {
         Voice { phase } => {
             // The question stays up over the pill; voice events do not close it.
@@ -121,12 +123,13 @@ pub fn on_engine_event<R: Runtime>(app: &AppHandle<R>, event: &oasis_engine::Eng
                 }
                 p if p.starts_with("getting_ready:") => Mode::Ready,
                 // an idle voice does not take the offer down; it ends on its own answer
-                _ if MODE.load(Ordering::Relaxed) == Mode::Learn as u8 => return,
+                _ if matches!(MODE.load(Ordering::Relaxed), m if m == Mode::Learn as u8 || m == Mode::Mic as u8) => return,
                 _ => Mode::Hidden,
             }
         }
         Confirm { .. } => Mode::Close,
-        ConfirmEnd { .. } if MODE.load(Ordering::Relaxed) == Mode::Close as u8 => Mode::Hidden,
+        MicOffer { .. } => Mode::Mic,
+        ConfirmEnd { .. } if matches!(MODE.load(Ordering::Relaxed), m if m == Mode::Close as u8 || m == Mode::Mic as u8) => Mode::Hidden,
         _ => return,
     };
     // Placed again on every event, not only on a change: the pointer may have moved to another screen.
@@ -142,7 +145,7 @@ fn apply<R: Runtime>(app: &AppHandle<R>, mode: Mode) -> tauri::Result<()> {
         return window.hide();
     }
     // Only the tick and cross take clicks; everything else lets them through. The window still never takes focus.
-    window.set_ignore_cursor_events(!matches!(mode, Mode::Locked | Mode::Learn))?;
+    window.set_ignore_cursor_events(!matches!(mode, Mode::Locked | Mode::Learn | Mode::Mic))?;
     // shortcut: the pop-up always lies across the bottom; the stored `SIDE` (vertical layout) is ignored, read `SIDE` here to stand it up again.
     let side = Side::Bottom;
     let (w, h) = mode.size(side);

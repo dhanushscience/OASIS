@@ -25,6 +25,27 @@ pub fn learn_answer(
     })
 }
 
+/// Look for newly plugged-in microphones twice a second and offer each one (HUD and pad buttons).
+/// shortcut: polling, not Windows device notifications; swap if a scan ever shows up in the CPU use.
+pub fn watch_microphones(app: &AppHandle) {
+    let app = app.clone();
+    let _ = std::thread::Builder::new().name("oasis-mic-watch".into()).spawn(move || {
+        let mut seen = oasis_voice::device_names();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let now = oasis_voice::device_names();
+            if let Some(engine) = app.state::<EngineSlot>().handle.lock().ok().as_ref().and_then(|h| h.as_ref()) {
+                let saved = oasis_settings::voice::VoiceSettings::from(&engine.settings()).microphone.to_lowercase();
+                // a mic the user already chose coming back needs no question
+                if let Some(name) = now.iter().find(|n| !seen.contains(n) && (saved.is_empty() || !n.to_lowercase().starts_with(&saved))) {
+                    engine.offer_microphone(name);
+                }
+            }
+            seen = now;
+        }
+    });
+}
+
 /// The kept dictations, newest first, for the Insights screen.
 #[tauri::command]
 pub fn history_list(slot: State<'_, EngineSlot>) -> Result<Vec<oasis_engine::history::Entry>, String> {

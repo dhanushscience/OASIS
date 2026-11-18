@@ -185,7 +185,8 @@ pub fn run_single(backend: &mut dyn ActionBackend, kind: &str, value: &str) -> b
         ActionKind::Chime => matches!(value, "1" | "4") && backend.system(&format!("chime:{value}")),
         ActionKind::PlaySound => super::sounds::find(value).is_some() && backend.system(&format!("sound:{}", value.trim())),
         ActionKind::Radio if is_radio(value) => backend.system(&format!("radio:{}", value.replace('|', ":"))),
-        ActionKind::Brightness if is_brightness(value) => backend.system(&format!("brightness:{value}")),
+        ActionKind::Brightness if is_level(value) => backend.system(&format!("brightness:{value}")),
+        ActionKind::Volume if is_level(value) => backend.system(&format!("volume:{value}")),
         ActionKind::Theme => matches!(value, "dark" | "light") && backend.system(&format!("theme-{value}")),
         _ => false,
     }
@@ -197,7 +198,7 @@ fn is_radio(value: &str) -> bool {
 }
 
 /// `70`, `+10` or `-10`: a level or a change, at most 100.
-fn is_brightness(value: &str) -> bool {
+fn is_level(value: &str) -> bool {
     let digits = value.strip_prefix(['+', '-']).unwrap_or(value);
     (1..=3).contains(&digits.len()) && digits.bytes().all(|b| b.is_ascii_digit()) && digits.parse::<u32>().is_ok_and(|n| n <= 100)
 }

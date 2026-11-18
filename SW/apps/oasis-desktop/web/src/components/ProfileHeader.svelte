@@ -132,7 +132,7 @@
       : saveLook(next, p.icon_emoji);
   });
   function fillSet() {
-    picked = ''; pickNote = ''; setNote = '';
+    picked = ''; pickNote = ''; setNote = ''; setAddr = '';
     if (mode === 'new') { setName = `CP${p.configs.length + 1}`; setMatch = ''; setPanel = ''; setWhen = ''; setLabel = ''; return; }
     setName = cfg.name; setMatch = cfg.is_primary ? '' : cfg.context_match; setPanel = cfg.panel_id; setWhen = cfg.when; setLabel = cfg.label_mode;
   }
@@ -166,7 +166,12 @@
     !!setWhen || /youtu/i.test(setMatch) || /youtu/i.test(p.context_match) ||
       p.context_match.toLowerCase().split(/[,\s]+/).some((w) => BROWSERS.includes(w.replace(/\.exe$/, ''))),
   );
-  const setEdit = () => ({ name: setName, context_match: setMatch, when: setWhen, panel_id: setPanel, label_mode: setLabel });
+  // A typed address (e.g. youtube.com/shorts) wins over a picked section; only the "new set" panel has the field.
+  let setAddr = $state('');
+  const setEdit = () => {
+    const a = view === 'new' ? setAddr.trim() : '';
+    return { name: setName, context_match: a || setMatch, when: setWhen, panel_id: a ? '' : setPanel, label_mode: setLabel };
+  };
   function openSettings() {
     name = p.name; openMatch(); emoji = p.icon_emoji; problem = ''; multi = p.multi; labels = p.label_mode !== 'hide';
     iconBytes = null; iconNote = ''; iconPreview = data.icons[p.index] ?? '';
@@ -367,16 +372,22 @@
             <span class="hint" class:warn={pickNote}>{pickNote || (countdown > 0 ? 'Click inside the program, in the part you want (a terminal, the editor, a page).' : (picked ? 'This set runs when that section is in front.' : 'OASIS steps aside, then click the section in the other program.'))}</span>
           </div>
         </div>
+        <div class="row top"><span class="rl"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18" /></svg>Or an address</span>
+          <div class="stack">
+            <input bind:value={setAddr} readonly={locked} autocomplete="off" maxlength="200" placeholder="youtube.com/shorts" aria-label="Web address" />
+            <span class="hint">Only that page of a site, e.g. youtube.com/shorts. Used instead of the picked section.</span>
+          </div>
+        </div>
         <div class="row"><span class="rl"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" /><circle cx="12" cy="12" r="3" /></svg>Show labels</span>
           <Select bind:value={setLabel} disabled={locked} label="Show labels" options={labelModes} /></div>
       </div>
     {/if}
     {#if problem}<div class="problem" role="alert">{problem}</div>{/if}
     <div class="actions">
-      {#if p.multi && !picked && countdown === 0}<span class="hint">Pick the section to continue.</span>{/if}
+      {#if p.multi && !picked && !setAddr.trim() && countdown === 0}<span class="hint">Pick the section or type an address to continue.</span>{/if}
       <span class="grow"></span>
       {#if p.multi}
-        <button class="primary" disabled={locked || !picked || countdown > 0}
+        <button class="primary" disabled={locked || (!picked && !setAddr.trim()) || countdown > 0}
           onclick={async () => { if (await attempt(() => addSet(setEdit()))) { mode = 'edit'; fillSet(); closeSettings(); } }}>Create set</button>
       {:else}
         <button class="primary" disabled={locked} onclick={() => attempt(() => setMulti(true))}>Turn on</button>

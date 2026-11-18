@@ -1,13 +1,12 @@
 //! "set volume to 30", "turn the volume up by 10", "lower the volume". Port of the phrases in
 //! `Features/SystemControl/VolumeIntentParser.cs`.
 //!
-//! shortcut: no Core Audio. Windows moves the volume 2% per media key, so a level is reached by
-//! 50 presses down and then N/2 up (an Automation of Shortcut steps). It shows the volume pop-up
-//! and is not exact if the machine uses another step; upgrade to the endpoint volume API then.
+//! A level or a change of N% is one `Volume` action (`70`, `+10`, `-10`): the host reads the current
+//! volume and sets the new one straight away, with no slide through zero. A bare "volume up" or
+//! "volume down" is still one media key.
 
-use crate::actions::{ActionKind, ActionStep, ButtonAction};
+use crate::actions::{ActionKind, ButtonAction};
 
-const STEP_PERCENT: u32 = 2;
 const VERBS: [&str; 12] = ["set", "make", "change", "increase", "decrease", "raise", "lower", "turn", "up", "down", "to", "windows"];
 const NAMED: [(&str, u32); 13] = [
     ("zero", 0), ("ten", 10), ("twenty", 20), ("thirty", 30), ("forty", 40), ("fifty", 50),
@@ -38,15 +37,15 @@ pub fn plan(normalized: &str) -> Option<(ButtonAction, String)> {
     };
 
     match value {
-        None if up || down => Some((presses(if up { "VolumeUp" } else { "VolumeDown" }, 1), if up { "VOLUME UP" } else { "VOLUME DOWN" }.into())),
+        None if up || down => Some((key(if up { "VolumeUp" } else { "VolumeDown" }), if up { "VOLUME UP" } else { "VOLUME DOWN" }.into())),
         None => None,
         Some(0) if by => None,
         Some(n) if by && (up || down) => {
-            let times = n.div_ceil(STEP_PERCENT);
-            Some((presses(if up { "VolumeUp" } else { "VolumeDown" }, times), format!("VOLUME {}{n}%", if up { '+' } else { '-' })))
+            let sign = if up { '+' } else { '-' };
+            Some((level(format!("{sign}{n}")), format!("VOLUME {sign}{n}%")))
         }
         Some(_) if by => None,
-        Some(n) => Some((set_to(n), format!("VOLUME {n}%"))),
+        Some(n) => Some((level(n.to_string()), format!("VOLUME {n}%"))),
     }
 }
 
@@ -58,50 +57,37 @@ pub(super) fn percent(word: &str) -> Option<u32> {
     NAMED.iter().find(|(name, _)| *name == word).map(|(_, n)| *n)
 }
 
-fn key(name: &str) -> ActionStep {
-    ActionStep { kind: ActionKind::Shortcut.as_str().into(), value: name.into(), ..Default::default() }
+fn key(name: &str) -> ButtonAction {
+    ButtonAction { kind: ActionKind::Shortcut.as_str().into(), value: name.into(), steps: vec![] }
 }
 
-fn presses(name: &str, times: u32) -> ButtonAction {
-    if times == 1 {
-        return ButtonAction { kind: ActionKind::Shortcut.as_str().into(), value: name.into(), steps: vec![] };
-    }
-    ButtonAction { kind: ActionKind::Automation.as_str().into(), value: String::new(), steps: (0..times).map(|_| key(name)).collect() }
-}
-
-fn set_to(percent: u32) -> ButtonAction {
-    let mut steps: Vec<ActionStep> = (0..100 / STEP_PERCENT).map(|_| key("VolumeDown")).collect();
-    steps.extend((0..percent.div_ceil(STEP_PERCENT).min(100 / STEP_PERCENT)).map(|_| key("VolumeUp")));
-    ButtonAction { kind: ActionKind::Automation.as_str().into(), value: String::new(), steps }
+fn level(value: String) -> ButtonAction {
+    ButtonAction { kind: ActionKind::Volume.as_str().into(), value, steps: vec![] }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn ups_downs(a: &ButtonAction) -> (usize, usize) {
-        let n = |k: &str| a.steps.iter().filter(|s| s.value == k).count();
-        (n("VolumeUp"), n("VolumeDown"))
+    fn volume(text: &str) -> (String, String) {
+        let (action, label) = plan(text).unwrap_or_else(|| panic!("{text}"));
+        assert_eq!(action.kind, "Volume", "{text}");
+        (action.value, label)
     }
 
     #[test]
-    fn a_level_is_all_the_way_down_then_up_to_it() {
+    fn a_level_is_one_direct_set() {
         for text in ["set volume to 30", "set the volume to 30 percent", "volume 30%", "make my volume thirty", "increase the volume to 30"] {
-            let (action, label) = plan(text).unwrap_or_else(|| panic!("{text}"));
-            assert_eq!(ups_downs(&action), (15, 50), "{text}");
-            assert_eq!(label, "VOLUME 30%");
+            assert_eq!(volume(text), ("30".into(), "VOLUME 30%".into()), "{text}");
         }
-        assert_eq!(ups_downs(&plan("set volume to 100").unwrap().0), (50, 50));
-        assert_eq!(ups_downs(&plan("set volume to 500").unwrap().0), (50, 50), "capped at 100");
-        assert_eq!(ups_downs(&plan("set volume to 0").unwrap().0), (0, 50));
+        assert_eq!(volume("set volume to 500").0, "100", "capped at 100");
+        assert_eq!(volume("set volume to 0").0, "0");
     }
 
     #[test]
     fn steps_are_relative() {
-        let (a, label) = plan("turn the volume up by 10 percent").unwrap();
-        assert_eq!(ups_downs(&a), (5, 0));
-        assert_eq!(label, "VOLUME +10%");
-        assert_eq!(ups_downs(&plan("lower volume by 6").unwrap().0), (0, 3));
+        assert_eq!(volume("turn the volume up by 10 percent"), ("+10".into(), "VOLUME +10%".into()));
+        assert_eq!(volume("lower volume by 6").0, "-6");
         let (single, _) = plan("turn down the volume").unwrap();
         assert_eq!((single.kind.as_str(), single.value.as_str()), ("Shortcut", "VolumeDown"));
         assert_eq!(plan("volume up").unwrap().0.value, "VolumeUp");

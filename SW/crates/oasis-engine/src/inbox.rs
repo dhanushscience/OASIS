@@ -37,6 +37,8 @@ pub(crate) enum Input {
     /// The answer to a `FrontAsk::Capture`: whether the recording is typed, and how long the
     /// focus question took.
     Capture { dictate: bool, focus_ms: u128 },
+    /// A microphone was plugged in: ask on the pad whether to use it.
+    MicOffer(String),
 }
 
 /// What the loop asks the front thread. Answered one at a time, in order.

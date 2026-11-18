@@ -383,6 +383,7 @@ fn main() {
                 .unwrap_or_else(|| "right".to_string());
             overlay::create(app.handle(), saved, &dock)?;
             hud::create(app.handle())?;
+            voice::watch_microphones(app.handle());
             #[cfg(windows)]
             follow_the_screen_in_use(app.handle().clone());
             let mut tray = TrayIconBuilder::new()

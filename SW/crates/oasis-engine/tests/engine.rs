@@ -1876,7 +1876,9 @@ fn in_a_text_field_opening_another_app_or_site_is_a_command() {
         let v = start_gate(&format!("gate-open-{n}"), true, &[("Notepad", "Untitled - Notepad")], said);
         say_and_settle(&v);
         assert!(v.h.actions().is_empty(), "{said}: {:?}", v.h.actions());
-        assert_eq!(commands(&v.h), [(label.to_string(), "asking".to_string())], "{said}");
+        // The pill names the app found on this PC ("GOOGLE CHROME"), so the spoken name need only be in it.
+        let got = commands(&v.h);
+        assert!(got.len() == 1 && got[0].0.contains(label) && got[0].1 == "asking", "{said}: {got:?}");
     }
 }
 
@@ -1912,7 +1914,8 @@ fn with_no_text_field_a_polite_command_runs() {
     // Opening an app asks on the pad the first time (the default approval mode).
     let v = start_gate("gate-polite", false, &[], "Can you launch Chrome?");
     say_and_settle(&v);
-    assert_eq!(commands(&v.h), [("CHROME".to_string(), "asking".to_string())]);
+    let got = commands(&v.h);
+    assert!(got.len() == 1 && got[0].0.contains("CHROME") && got[0].1 == "asking", "{got:?}");
     assert!(v.h.actions().is_empty(), "nothing typed, nothing run unasked");
 }
 

@@ -77,7 +77,17 @@ pub fn url_host_or_path_contains(url: &str, fragment: &str) -> bool {
         let before_query = lower.split(['?', '#']).next().unwrap_or("");
         return before_query.contains(&needle.to_lowercase());
     };
-    contains_ignore_case(&host, needle) || contains_ignore_case(&url_path(url), needle)
+    let path = url_path(url);
+    // `youtube.com/shorts` spans host and path, so it is also tried against both joined.
+    contains_ignore_case(&host, needle)
+        || contains_ignore_case(&path, needle)
+        || contains_ignore_case(&format!("{host}{path}"), needle.trim_start_matches("https://").trim_start_matches("http://"))
+}
+
+/// Whether a stored match names a page inside a site (`youtube.com/shorts`), not just the site.
+pub fn has_path(context_match: &str) -> bool {
+    let m = context_match.trim();
+    m.split_once("://").map_or(m, |(_, rest)| rest).trim_end_matches('/').contains('/')
 }
 
 /// The name a site puts in its page titles: `www.netflix.com/browse` → `netflix`.
@@ -94,6 +104,13 @@ pub fn site_label(site: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_match_can_span_host_and_path() {
+        assert!(url_host_or_path_contains("https://www.youtube.com/shorts/abc?x=1", "youtube.com/shorts"));
+        assert!(!url_host_or_path_contains("https://www.youtube.com/watch?v=shorts", "youtube.com/shorts"));
+        assert!(has_path("youtube.com/shorts") && has_path("https://a.com/x/") && !has_path("youtube.com/") && !has_path("netflix"));
+    }
 
     #[test]
     fn hosts_from_full_and_scheme_less_addresses() {

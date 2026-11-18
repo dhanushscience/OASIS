@@ -254,7 +254,7 @@ fn set_admin_blocking(app: &AppHandle, on: bool) -> Result<SystemStatus, String>
     };
     if !done {
         return Err(if on {
-            "Administrator mode was not turned on: the approval was declined or Windows refused."
+            "Administrator mode was not turned on: the approval was declined, Windows refused, or OASIS is not installed under Program Files (a folder you can write to would let other programs borrow administrator rights)."
         } else {
             "Administrator mode was not turned off: the approval was declined or Windows refused."
         }

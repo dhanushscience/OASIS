@@ -48,6 +48,7 @@ pub(super) fn dictation_text(shared: &Shared, settings: &Settings, verified: boo
     let verified = verified && voice.paste_dictation;
     if keep_on_clipboard && verified && shared.live.load(Ordering::SeqCst) {
         let _ = oasis_win::clipboard::set_text(&typed);
+        shared.emit(EngineEvent::Note { text: "No text box was in focus, so this may not have been typed. It is on the clipboard: press Ctrl+V in the box you want.".into() });
     }
     if VoiceSettings::from(settings).keep_trace {
         write_dictation_trace(shared, style, raw, &trace, &typed);

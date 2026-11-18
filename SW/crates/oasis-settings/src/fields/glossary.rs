@@ -17,30 +17,38 @@ pub(super) fn glossary_text(settings: &Settings, key: &str) -> String {
         .flatten()
         .map(|r| (text(r, "Spoken"), text(r, "Canonical")))
         .filter(|(s, c)| !s.is_empty() && !c.is_empty())
-        .map(|(s, c)| format!("{s} = {c}"))
+        .map(|(s, c)| if s == c { c } else { format!("{s} = {c}") })
         .collect::<Vec<_>>()
         .join("
 ")
 }
 
 /// Add one spelling to the dictionary, in place of an older one for the same spoken words.
+/// An empty `spoken` adds the word on its own: it is heard the same as it is written.
 pub fn add_glossary_word(settings: &mut Settings, spoken: &str, written: &str) -> Result<(), EditError> {
-    let (spoken, written) = (spoken.trim(), written.trim());
+    let written = written.trim();
+    let spoken = if spoken.trim().is_empty() { written } else { spoken.trim() };
     if spoken.contains('=') || written.contains('=') {
         return bad("A dictionary word cannot hold an = sign.");
     }
-    let same = |line: &str| line.split_once('=').is_some_and(|(s, _)| s.trim().eq_ignore_ascii_case(spoken));
+    let same = |line: &str| line.split('=').next().is_some_and(|s| s.trim().eq_ignore_ascii_case(spoken));
     let mut lines: Vec<String> = glossary_text(settings, "DictationGlossary").lines().filter(|l| !same(l)).map(String::from).collect();
-    lines.push(format!("{spoken} = {written}"));
+    lines.push(if spoken == written { written.to_string() } else { format!("{spoken} = {written}") });
     set_field(settings, "voice.dictation_glossary", json!(lines.join("\n")), &FieldContext::default())
 }
 
 /// The lines typed in the box as the list to save. Blank lines are skipped; any other line must be
-/// `spoken = written`, short, and the whole list not long. Nothing is saved if a line is refused.
-pub(super) fn glossary_rows(text: &str, label: &str, max: usize) -> Result<Value, EditError> {
+/// `spoken = written` (or, with `bare_ok`, a word on its own, heard as it is written), short, and the
+/// whole list not long. Nothing is saved if a line is refused.
+pub(super) fn glossary_rows(text: &str, label: &str, max: usize, bare_ok: bool) -> Result<Value, EditError> {
     let mut rows = Vec::new();
     for (n, line) in text.lines().enumerate().filter(|(_, l)| !l.trim().is_empty()) {
-        let Some((spoken, written)) = line.split_once('=').map(|(s, w)| (s.trim(), w.trim())) else {
+        let pair = match line.split_once('=') {
+            Some((s, w)) => Some((s.trim(), w.trim())),
+            None if bare_ok => Some((line.trim(), line.trim())),
+            None => None,
+        };
+        let Some((spoken, written)) = pair else {
             return bad(format!("{label}, line {}: write it as  how it sounds = how to write it.", n + 1));
         };
         if spoken.is_empty() || written.is_empty() {
@@ -91,10 +99,25 @@ my name = Dhanush"));
     }
 
     #[test]
+    fn a_dictionary_word_can_stand_alone_but_a_fragment_cannot() {
+        let mut s = Settings::default();
+        set(&mut s, "voice.dictation_glossary", json!("Shashank
+kay cad = KiCad")).unwrap();
+        assert_eq!(field(&s, "voice.dictation_glossary").value, json!("Shashank
+kay cad = KiCad"));
+        assert_eq!(crate::voice::VoiceSettings::from(&s).dictation_glossary[0], ("Shashank".to_string(), "Shashank".to_string()));
+        add_glossary_word(&mut s, "", "Tim").unwrap();
+        assert_eq!(field(&s, "voice.dictation_glossary").value, json!("Shashank
+kay cad = KiCad
+Tim"));
+        assert!(set(&mut s, "voice.replacements", json!("my mail")).is_err());
+    }
+
+    #[test]
     fn a_bad_glossary_line_changes_nothing() {
         let mut s = Settings::default();
         set(&mut s, "voice.dictation_glossary", json!("a = b")).unwrap();
-        for bad in ["no equals sign", "= written", "spoken =", &format!("{} = x", "y".repeat(61))] {
+        for bad in ["= written", "spoken =", &format!("{} = x", "y".repeat(61))] {
             assert!(set(&mut s, "voice.dictation_glossary", json!(bad)).is_err(), "{bad}");
         }
         assert!(set(&mut s, "voice.dictation_glossary", json!(5)).is_err());

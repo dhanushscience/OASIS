@@ -95,6 +95,28 @@
     background: transparent; color: var(--ink); border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); }
   #learn button:hover { border-color: var(--no); color: var(--no); }
 
+  /* ---- "New microphone": the same white bar as the close question, a mic badge on the left, the device
+     name under a small label, and the two answers as the pad's keys (01 use it, 02 keep the current one). */
+  #mic { box-sizing: border-box; height: 52px; padding: 0 6px 0 8px; border-radius: 999px;
+    display: flex; align-items: center; gap: 10px; color: var(--ink); white-space: nowrap;
+    background: var(--face); border: var(--edge); box-shadow: var(--lift);
+    animation: rise .2s var(--ease); }
+  #mic .badge { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center;
+    color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+  #mic .badge svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  #mic .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; max-width: 210px; }
+  #mic .lab { font-size: 9.5px; font-weight: 700; letter-spacing: .12em; color: var(--accent); }
+  #mic .name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+  #mic .k { display: inline-flex; align-items: center; gap: 5px; height: 34px; padding: 0 12px; border-radius: 999px; border: 0;
+    font: inherit; font-size: 12px; font-weight: 700; color: #fff; background: var(--c); cursor: pointer;
+    transition: filter .12s ease; }
+  #mic .k:hover { filter: brightness(1.1); }
+  #mic .k i { font: normal 600 10px/1 ui-monospace, Consolas, monospace; opacity: .85; }
+  #mic .k1 { --c: #ee5a24; }
+  #mic .k2 { --c: #1f9e8f; }
+  :root[data-theme='dark'] #mic .k1 { --c: #FF5A1F; color: #0A0A0A; }
+  :root[data-theme='dark'] #mic .k2 { --c: #22A898; color: #0A0A0A; }
+
   /* ---- the vertical pop-up: Rust stands the window at a side of the screen, vertically centred. The
      pill stands up (tick on top, bars stacked and swinging sideways, cross at the bottom); the boxes
      with words keep their shape and sit against that side. */
@@ -106,7 +128,7 @@
   @keyframes swellx { 0%, 100% { transform: scaleX(.25); } 50% { transform: scaleX(.5); } }
 
   @media (prefers-reduced-motion: reduce) {
-    #pill, #close, #learn { animation: none; }
+    #pill, #close, #learn, #mic { animation: none; }
     .wave i { transition: none; animation: none !important; }
   }
 </style>
@@ -127,6 +149,11 @@
   <div class="top"><span class="lab">SAVING TO DICTIONARY</span><button type="button">Don't save</button></div>
   <div class="words"></div>
   <div class="bar"><i></i></div>
+</div>
+<div id="mic" role="status" hidden>
+  <span class="badge"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></span>
+  <span class="txt"><span class="lab">NEW MICROPHONE</span><span class="name"></span></span>
+  <button type="button" class="k k1"><i>01</i>Use it</button><button type="button" class="k k2"><i>02</i>Keep</button>
 </div>
 <script>
   const { listen } = window.__TAURI__.event;
@@ -222,11 +249,19 @@
     learnTimer = setTimeout(() => answerLearn(true), LEARN_MS);
   });
 
+  // A microphone was plugged in: the buttons here press the pad's button 1 or 2, so the pad and the
+  // screen answer the same question (the engine ends it with confirm_end, or by itself after 12 s).
+  const mic = document.getElementById('mic');
+  mic.querySelectorAll('.k').forEach((k, i) => k.addEventListener('click', async () => {
+    await invoke('press_button', { button: i, down: true }).catch(() => {});
+    invoke('press_button', { button: i, down: false }).catch(() => {});
+  }));
+
   // The microphone level has an event of its own (main.rs), so the other windows are not woken 20 times a second.
   listen('voice-level', ({ payload: e }) => { if (!pill.hidden && !pill.classList.contains('thinking')) level(e.level); });
   listen('engine-event', ({ payload: e }) => {
     if ((e.type === 'voice' && e.phase && e.phase !== 'idle') || e.type === 'confirm') answerLearn(true);
-    if (e.type === 'voice') { if (close.hidden) show(e.phase); }
+    if (e.type === 'voice') { if (e.phase && e.phase !== 'idle') mic.hidden = true; if (close.hidden) show(e.phase); }
     else if (e.type === 'confirm') {
       const q = close.querySelector('.q');
       if (e.close != null) q.replaceChildren('Close ', Object.assign(document.createElement('b'), { textContent: e.close }), '?');
@@ -236,7 +271,12 @@
       b.textContent = e.close != null ? 'Keep' : 'Cancel';
       close.hidden = false;
       pill.hidden = true;
-    } else if (e.type === 'confirm_end') close.hidden = true;
+    } else if (e.type === 'mic_offer') {
+      mic.querySelector('.name').textContent = e.name;
+      mic.querySelector('.name').title = e.name;
+      pill.hidden = true; close.hidden = true; learn.hidden = true;
+      mic.hidden = false;
+    } else if (e.type === 'confirm_end') { close.hidden = true; mic.hidden = true; }
   });
 </script>
 </body>

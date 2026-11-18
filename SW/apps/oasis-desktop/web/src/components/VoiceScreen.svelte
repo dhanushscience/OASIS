@@ -109,8 +109,8 @@
   // ---- the dictionary: what the model hears → what you meant; and fragments: what you say → your own text to
   // type (an email address, say). Each list is its own card, with its own add box, search and editing state.
   const TABS = {
-    words: { id: 'voice.dictation_glossary', title: 'Dictionary', heard: 'Heard as, e.g. kay cad, keycat', write: 'Write as, e.g. KiCad', add: 'Add word', empty: 'No words yet. Add a word the model mishears, and how it should be written.',
-      hint: 'Words the speech model keeps getting wrong. They are fixed after speech-to-text, before anything is typed or a command runs. With Groq on, the written forms are also sent with each recording, so Groq hears them right.' },
+    words: { id: 'voice.dictation_glossary', title: 'Dictionary', heard: 'Heard as (optional), e.g. kay cad, keycat', write: 'Write as, e.g. KiCad', add: 'Add word', empty: 'No words yet. Add a name or term you use, and, if the model mishears it, how it sounds.',
+      hint: 'Names and terms you use. Add just the word, or also how it is misheard: that is fixed after speech-to-text, before anything is typed or a command runs. The words are also given to the cleanup model, and, with Groq on, sent with each recording.' },
     repl: { id: 'voice.replacements', title: 'Fragments', heard: 'When you say, e.g. my mail', write: 'Type, e.g. you@example.com', add: 'Add fragment', empty: 'No fragments yet. Add a phrase you say, and the text to type instead.',
       hint: 'Your own text for a phrase you say. Say it on its own, or after “insert”, to type just the text: “insert my mail”. Inside a sentence it is swapped in: “send it to my mail”. Typed exactly as written.' },
   };
@@ -119,14 +119,15 @@
     String(v(id) ?? '')
       .split('\n')
       .map((line) => line.split('='))
-      .filter((p) => p.length >= 2 && p[0].trim() && p.slice(1).join('=').trim())
-      .map((p) => ({ heard: p[0].trim(), write: p.slice(1).join('=').trim() }));
+      .filter((p) => (p.length >= 2 ? p[0].trim() && p.slice(1).join('=').trim() : p[0].trim()))
+      // a line with no = is a word on its own: heard the same as it is written
+      .map((p) => (p.length >= 2 ? { heard: p[0].trim(), write: p.slice(1).join('=').trim() } : { heard: p[0].trim(), write: p[0].trim() }));
   const words = $derived(parse(TABS.words.id));
   const repls = $derived(parse(TABS.repl.id));
   const lists = $derived({ words, repl: repls });
   // One row per word as it is written: every way it is heard sits on that row ("key CAD · keycat → KiCad").
   // Saving keeps that: entries written the same way (ignoring capitals) are merged, in the newest spelling.
-  const form = $state({ words: { heard: '', write: '', editing: '', query: '' }, repl: { heard: '', write: '', editing: '', query: '' } });
+  const form = $state({ words: { heard: '', write: '', editing: '', query: '', more: false }, repl: { heard: '', write: '', editing: '', query: '', more: false } });
   /** @typedef {{ key: string, write: string, heard: string[] }} Group */
   const groupsOf = (/** @type {{ heard: string, write: string }[]} */ pairs) => {
     /** @type {Map<string, Group>} */
@@ -147,13 +148,14 @@
   };
   /** Saved one line per way it is heard, as the engine reads it; merged first. */
   const saveList = (/** @type {ListKey} */ k, /** @type {{ heard: string, write: string }[]} */ next) =>
-    set(TABS[k].id, groupsOf(next).flatMap((g) => g.heard.map((h) => `${h} = ${g.write}`)).join('\n'));
+    set(TABS[k].id, groupsOf(next).flatMap((g) => g.heard.map((h) => (h === g.write ? g.write : `${h} = ${g.write}`))).join('\n'));
   function addWord(/** @type {ListKey} */ k) {
     const fm = form[k];
     // several ways it is heard can go in at once, separated by commas
     const said = fm.heard.split(',').map((h) => h.trim()).filter(Boolean);
     const w = fm.write.trim();
-    if (!said.length || !w) return;
+    if (!w) return;
+    if (!said.length) { if (k !== 'words') return; said.push(w); } // a dictionary word needs no 'heard as'
     if (said.some((h) => h.includes('='))) { problem = 'What you say cannot contain “=”.'; return; }
     const lower = said.map((h) => h.toLowerCase());
     // the row being edited is replaced; a heard form already used elsewhere moves to this word
@@ -161,14 +163,67 @@
     saveList(k, [...rest, ...said.map((h) => ({ heard: h, write: w }))]);
     fm.heard = fm.write = '';
     fm.editing = '';
+    fm.more = false;
   }
-  function editWord(/** @type {ListKey} */ k, /** @type {Group} */ g) { const fm = form[k]; fm.editing = g.key; fm.heard = g.heard.join(', '); fm.write = g.write; }
+  function editWord(/** @type {ListKey} */ k, /** @type {Group} */ g) { const fm = form[k]; fm.editing = g.key; fm.heard = g.heard.filter((h) => h !== g.write).join(', '); fm.write = g.write; fm.more = !!fm.heard; }
   function removeWord(/** @type {ListKey} */ k, /** @type {Group} */ g) {
     saveList(k, lists[k].filter((x) => x.write.toLowerCase() !== g.key));
-    if (form[k].editing === g.key) { form[k].editing = ''; form[k].heard = form[k].write = ''; }
+    if (form[k].editing === g.key) { form[k].editing = ''; form[k].heard = form[k].write = ''; form[k].more = false; }
   }
-  const stopEditing = (/** @type {ListKey} */ k) => { form[k].editing = ''; form[k].heard = form[k].write = ''; };
+  /** The Dictionary shows a few rows of each kind; the rest, with search, is in a window. */
+  const SHOWN = 6;
+  const MY_SHOWN = 12; // chips; a shortcut over measuring the box, since a chip's width varies
+  let allOpen = $state(false);
+  const portal = (/** @type {HTMLElement} */ node) => { document.body.appendChild(node); return { destroy: () => node.remove() }; };
+  const stopEditing = (/** @type {ListKey} */ k) => { form[k].editing = ''; form[k].heard = form[k].write = ''; form[k].more = false; };
 </script>
+
+<svelte:window onkeydown={(e) => { if (e.key === 'Escape') allOpen = false; }} />
+
+{#snippet wordRow(/** @type {ListKey} */ k, /** @type {Group} */ g)}
+  {@const fm = form[k]}
+  <div class="word" class:sel={g.key === fm.editing}>
+    <button class="pick" onclick={() => editWord(k, g)} title={g.heard.length > 1 ? `Heard as: ${g.heard.join(', ')}` : 'Edit'}>{#if k === 'words'}<span class="w">{g.write}</span>{#if g.heard.some((h) => h !== g.write)}<span class="to" aria-hidden="true">←</span><span class="h mono">{g.heard.filter((h) => h !== g.write).join(' · ')}</span>{/if}{:else}{#if g.heard.some((h) => h !== g.write)}<span class="h mono">{g.heard.filter((h) => h !== g.write).join(' · ')}</span><span class="to" aria-hidden="true">→</span>{/if}<span class="w">{g.write}</span>{/if}</button>
+    <button class="del" aria-label="Remove {g.write}" onclick={() => removeWord(k, g)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+  </div>
+{/snippet}
+
+{#snippet addForm(/** @type {ListKey} */ k)}
+  {@const t = TABS[k]}
+  {@const fm = form[k]}
+  {#if k === 'words'}
+    <!-- one thing is needed: the word. How it gets misheard is a second row that opens on request. -->
+    <div class="add1">
+      <input class="main" bind:value={fm.write} placeholder="Word to add, e.g. KiCad" aria-label="Word to add" autocomplete="off" onkeydown={(e) => e.key === 'Enter' && addWord(k)} />
+      <span class="addbtns">
+        <button class="dark" disabled={!fm.write.trim()} onclick={() => addWord(k)}>{fm.editing ? 'Update' : t.add}</button>
+        {#if fm.editing}<button class="quiet" onclick={() => stopEditing(k)}>Cancel</button>{/if}
+      </span>
+    </div>
+    {#if fm.more}
+      <input class="sec" bind:value={fm.heard} placeholder="Misheard as, e.g. kay cad, keycat (commas between)" aria-label="Misheard as" autocomplete="off" onkeydown={(e) => e.key === 'Enter' && addWord(k)} />
+    {:else}
+      <button class="more" onclick={() => (fm.more = true)}><b aria-hidden="true">+</b> It gets misheard? Add how it sounds</button>
+    {/if}
+  {:else}
+  <div class="add">
+    <input bind:value={fm.heard} placeholder={t.heard} aria-label={t.heard} autocomplete="off" onkeydown={(e) => e.key === 'Enter' && addWord(k)} />
+    <span class="to" aria-hidden="true">→</span>
+    <input bind:value={fm.write} placeholder={t.write} aria-label={t.write} autocomplete="off" onkeydown={(e) => e.key === 'Enter' && addWord(k)} />
+    <span class="addbtns">
+      <button class="dark" disabled={(k !== 'words' && !fm.heard.trim()) || !fm.write.trim()} onclick={() => addWord(k)}>{fm.editing ? 'Update' : t.add}</button>
+      {#if fm.editing}<button class="quiet" onclick={() => stopEditing(k)}>Cancel</button>{/if}
+    </span>
+  </div>
+  {/if}
+{/snippet}
+
+{#snippet chip(/** @type {ListKey} */ k, /** @type {Group} */ g)}
+  <span class="chip" class:sel={g.key === form[k].editing}>
+    <button class="pick" title="Edit" onclick={() => editWord(k, g)}>{g.write}</button>
+    <button class="del" aria-label="Remove {g.write}" onclick={() => removeWord(k, g)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+  </span>
+{/snippet}
 
 {#snippet listCard(/** @type {ListKey} */ k)}
   {@const t = TABS[k]}
@@ -179,27 +234,47 @@
       <input class="search" bind:value={fm.query} placeholder="Search" aria-label="Search {t.title}" autocomplete="off" />
     </div>
     <span class="hint">{t.hint}</span>
-    <div class="add">
-      <input bind:value={fm.heard} placeholder={t.heard} aria-label={t.heard} autocomplete="off" onkeydown={(e) => e.key === 'Enter' && addWord(k)} />
-      <span class="to" aria-hidden="true">→</span>
-      <input bind:value={fm.write} placeholder={t.write} aria-label={t.write} autocomplete="off" onkeydown={(e) => e.key === 'Enter' && addWord(k)} />
-      <span class="addbtns">
-        <button class="dark" disabled={!fm.heard.trim() || !fm.write.trim()} onclick={() => addWord(k)}>{fm.editing ? 'Update' : t.add}</button>
-        {#if fm.editing}<button class="quiet" onclick={() => stopEditing(k)}>Cancel</button>{/if}
-      </span>
-    </div>
+    {@render addForm(k)}
     <!-- fragments: one per row, nothing cut short: what you say on the left, what it types on the right, wrapped -->
     {#if k === 'repl' && shown(k).length}<div class="fhead" aria-hidden="true"><span>You say</span><span>It types</span></div>{/if}
-    <div class="words" class:full={k === 'repl'}>
-      {#each shown(k) as g (g.key)}
-        <div class="word" class:sel={g.key === fm.editing}>
-          <button class="pick" onclick={() => editWord(k, g)} title={g.heard.length > 1 ? `Heard as: ${g.heard.join(', ')}` : 'Edit'}><span class="h mono">{g.heard.join(' · ')}</span><span class="to" aria-hidden="true">→</span><span class="w">{g.write}</span></button>
-          <button class="del" aria-label="Remove {g.write}" onclick={() => removeWord(k, g)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+    {#if k === 'words'}
+      {@const mine = shown(k).filter((g) => g.heard.every((h) => h === g.write))}
+      {@const fixed = shown(k).filter((g) => !g.heard.every((h) => h === g.write))}
+      <!-- your own words on top, the mis-heard ones with their fix below; a search looks through both -->
+      {#if mine.length}
+        <div class="subrow"><span class="sub">My words <span class="cnt">· {mine.length}</span></span>
+          {#if mine.length > MY_SHOWN}<button class="dots" aria-label="Show all {mine.length} of my words" title="Show all, search and edit" onclick={() => (allOpen = true)}><span aria-hidden="true">···</span></button>{/if}</div>
+        <div class="chips">{#each mine.slice(0, MY_SHOWN) as g (g.key)}{@render chip(k, g)}{/each}</div>
+      {/if}
+      {#if fixed.length}
+        <div class="subrow"><span class="sub">Corrected words <span class="cnt">· {fixed.length}</span></span>
+          {#if fixed.length > SHOWN}<button class="dots" aria-label="Show all {fixed.length} corrected words" title="Show all, search and edit" onclick={() => (allOpen = true)}><span aria-hidden="true">···</span></button>{/if}</div>
+        <div class="words fit">{#each fixed.slice(0, SHOWN) as g (g.key)}{@render wordRow(k, g)}{/each}</div>
+      {/if}
+      {#if allOpen}
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+        <div class="scrim" use:portal onclick={() => (allOpen = false)}>
+          <div class="dpop" role="dialog" tabindex="-1" aria-modal="true" aria-label="Dictionary" onclick={(e) => e.stopPropagation()}>
+            <div class="top">
+              <span class="lab">Dictionary <span class="cnt">· {groups.words.length}</span></span>
+              <button class="x" aria-label="Close" onclick={() => (allOpen = false)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+            </div>
+            {@render addForm(k)}
+            <input class="search wide" bind:value={fm.query} placeholder="Search words" aria-label="Search words" autocomplete="off" />
+            <div class="scroll">
+              {#if mine.length}<span class="sub">My words <span class="cnt">· {mine.length}</span></span><div class="chips">{#each mine as g (g.key)}{@render chip(k, g)}{/each}</div>{/if}
+              {#if fixed.length}<span class="sub">Corrected words <span class="cnt">· {fixed.length}</span></span><div class="words fit">{#each fixed as g (g.key)}{@render wordRow(k, g)}{/each}</div>{/if}
+              {#if !mine.length && !fixed.length}<p class="hint pad">Nothing matches.</p>{/if}
+            </div>
+          </div>
         </div>
-      {:else}
-        <p class="hint pad">{fm.query ? 'Nothing matches.' : t.empty}</p>
-      {/each}
-    </div>
+      {/if}
+      {#if !mine.length && !fixed.length}<p class="hint pad">{fm.query ? 'Nothing matches.' : t.empty}</p>{/if}
+    {:else}
+      <div class="words full">
+        {#each shown(k) as g (g.key)}{@render wordRow(k, g)}{:else}<p class="hint pad">{fm.query ? 'Nothing matches.' : t.empty}</p>{/each}
+      </div>
+    {/if}
   </section>
 {/snippet}
 
@@ -435,10 +510,38 @@
   .search { width: 160px; border-radius: var(--r-pill) !important; font-family: var(--mono); font-size: 12px !important; }
   /* the two boxes side by side, the button under them, so a narrow card still fits */
   .add { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
+  .add1 { display: flex; gap: 8px; align-items: center; }
+  .add1 .main { flex: 1; min-width: 0; }
+  .add1 .addbtns { grid-column: auto; }
+  .sec { font-size: 13px; opacity: .9; }
+  .more { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; border: 1px dashed var(--ink); border-radius: 999px; background: transparent; padding: 8px 14px; color: var(--ink); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .more b { font-size: 16px; line-height: 1; font-weight: 500; }
+  .more:hover, .more:focus-visible { background: var(--sunk); border-style: solid; }
   .addbtns { grid-column: 1 / -1; display: flex; gap: 8px; justify-content: flex-end; }
   .to { color: var(--faint); flex: none; }
   .words { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid var(--line); display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; column-gap: 18px; }
   .words.full { grid-template-columns: minmax(0, 1fr); border-top: 0; }
+  .words.fit { flex: none; overflow: visible; }
+  .subrow { display: flex; align-items: center; justify-content: space-between; }
+  .subrow .sub { padding: 12px 0 6px; }
+  .dots { border: 1px solid var(--line); border-radius: 999px; background: transparent; color: var(--ink); padding: 0 12px; height: 24px; font: 600 14px/1 var(--mono); letter-spacing: .12em; cursor: pointer; }
+  .dots:hover, .dots:focus-visible { background: var(--sunk); }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; }
+  .chip { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 999px; background: var(--sunk); max-width: 100%; }
+  .chip.sel { border-color: var(--ink); }
+  .chip .pick { border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; padding: 5px 4px 5px 12px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip .del { border: 0; background: transparent; color: var(--muted); width: 26px; height: 26px; padding: 0; cursor: pointer; display: grid; place-items: center; }
+  .chip .del svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; }
+  .chip .del:hover { color: var(--ink); }
+  .scrim { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .35); }
+  .dpop { width: min(720px, 100%); max-height: min(640px, 100%); display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: var(--r-bar); background: var(--surface); box-shadow: 0 12px 40px var(--shadow); outline: none; }
+  .dpop .top { display: flex; align-items: center; justify-content: space-between; }
+  .dpop .x { border: 0; background: transparent; color: var(--ink); width: 28px; height: 28px; cursor: pointer; }
+  .dpop .x svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+  .dpop .search.wide { width: 100%; }
+  .dpop .scroll { overflow-y: auto; min-height: 0; }
+  .sub { font: 500 11px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 12px 0 6px; }
+  .sub .cnt { opacity: .7; }
   .fhead { display: grid; grid-template-columns: minmax(0, 2fr) 18px minmax(0, 3fr) 24px; gap: 10px; padding: 0 4px 6px; border-bottom: 1px solid var(--line); font: 500 10px/1.3 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
   .fhead span:last-child { grid-column: 3; }
   .word { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--hair); }

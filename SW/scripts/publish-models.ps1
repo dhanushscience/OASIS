@@ -34,8 +34,8 @@ $files = @(
     @("$ctc\model.int8.onnx", "parakeet-tdt-ctc-110m.model.int8.onnx", "stt/parakeet-tdt-ctc-110m/model.int8.onnx", "SpeechLight", $false),
     @("$ctc\tokens.txt", "parakeet-tdt-ctc-110m.tokens.txt", "stt/parakeet-tdt-ctc-110m/tokens.txt", "SpeechLight", $false),
     @($notice, "parakeet-tdt-ctc-110m.NOTICE.txt", "stt/parakeet-tdt-ctc-110m/NOTICE.txt", "SpeechLight", $false),
-    # The OASIS cleanup fine-tune of S1-mini (finetune/ is private, not in git). It must stay named S1-mini (LICENSE, additional term).
-    @("$PSScriptRoot\..\..\finetune\oasis_cleanup\gguf\oasis-cleanup-padded.gguf", "s1-mini-oasis.q4_k_m.gguf", "llm/s1-mini/s1-mini-q4_k_m.gguf", "Polish", $false),
+    # The OASIS cleanup fine-tune of S1-mini (.work/finetune/ is private, not in git). It must stay named S1-mini (LICENSE, additional term).
+    @("$PSScriptRoot\..\..\.work\finetune\oasis_cleanup\gguf\oasis-cleanup-padded.gguf", "s1-mini-oasis.q4_k_m.gguf", "llm/s1-mini/s1-mini-q4_k_m.gguf", "Polish", $false),
     @("$s1\LICENSE", "s1-mini.LICENSE", "llm/s1-mini/LICENSE", "Polish", $false),
     @("$PSScriptRoot\models\s1-mini-oasis.NOTICE", "s1-mini-oasis.NOTICE", "llm/s1-mini/NOTICE", "Polish", $false),
     @($LlamaZip, "llama-vulkan-b12304.zip", "runtime/llama-vulkan", "Polish", $true),

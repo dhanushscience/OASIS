@@ -13,12 +13,8 @@ build/
 *.log
 *.tmp
 
-# Private to the owner: never tracked, never pushed
-/INSPI/
-/docs/
-
-# Cleanup-model fine-tuning experiments (private until it works)
-/finetune/
-
-# Marketing video assets (screenshots, brand kit, prompt)
-/release-video/
+# Agent skills and lockfiles
+/.agents/
+/.agent/
+.agent*
+skills-lock.json

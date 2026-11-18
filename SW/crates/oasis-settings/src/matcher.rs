@@ -10,7 +10,7 @@
 use oasis_core::matching::profile_targets::{infer_kind, is_website, WEBSITE_KIND};
 use oasis_core::matching::text::{contains_ignore_case, is_blank};
 use oasis_core::matching::url_host::{
-    site_label, try_get_url_host, url_host_or_path_contains,
+    has_path, site_label, try_get_url_host, url_host_or_path_contains,
 };
 use oasis_core::matching::{BrowserProcesses, ForegroundContext, YouTubeHosts};
 
@@ -219,7 +219,7 @@ fn matches_signature_hints(config: &ConfigProfile, context: &ForegroundContext) 
 /// `Claude`) is an application even though claude.ai is a website.
 fn matches_context(context_match: &str, website: bool, context: &ForegroundContext) -> bool {
     if website {
-        if YouTubeHosts::is_context_match(Some(context_match)) {
+        if YouTubeHosts::is_context_match(Some(context_match)) && !has_path(context_match) {
             return is_youtube_foreground(context);
         }
         // The address host or path, never titles or query strings.
@@ -232,7 +232,7 @@ fn matches_context(context_match: &str, website: bool, context: &ForegroundConte
 }
 
 fn matches_title_or_url(context_match: &str, context: &ForegroundContext) -> bool {
-    if YouTubeHosts::is_context_match(Some(context_match)) {
+    if YouTubeHosts::is_context_match(Some(context_match)) && !has_path(context_match) {
         return is_youtube_foreground(context);
     }
     if looks_like_host_or_url_fragment(context_match) {

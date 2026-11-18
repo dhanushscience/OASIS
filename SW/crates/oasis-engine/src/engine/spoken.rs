@@ -10,7 +10,12 @@ pub(super) struct Pending {
     pub(super) heard: String,
     pub(super) label: String,
     pub(super) until: Instant,
+    /// A plugged-in microphone this question offers; approving switches to it instead of running `action`.
+    pub(super) mic: Option<String>,
 }
+
+/// How long a new-microphone offer stays up.
+pub(super) const MIC_OFFER_TIMEOUT: Duration = Duration::from_secs(12);
 
 /// How long an unanswered question stays on the pad.
 pub(super) const CONFIRM_TIMEOUT: Duration = Duration::from_secs(30);
@@ -86,7 +91,12 @@ pub(super) fn handle_heard(
     for text in decided.notes {
         ctx.shared.emit(EngineEvent::Note { text });
     }
-    let typed = match decided.decision {
+    let decision = match decided.decision {
+        Decision::Run { action, label } => Decision::Run { label: launched_name(&action, label, &heard.text), action },
+        Decision::Ask { action, label, summary } => Decision::Ask { label: launched_name(&action, label, &heard.text), action, summary },
+        other => other,
+    };
+    let typed = match decision {
         Decision::PasteFragment { shown, value } => {
             paste_typed(ctx.shared, ctx.settings, ctx.verified, ctx.jobs, &shown, value);
             false
@@ -106,7 +116,7 @@ pub(super) fn handle_heard(
         Decision::Ask { action, label, summary } => {
             say("asking", &label, &summary);
             let steps = steps_of(&action);
-            return Some(Pending { action, steps, summary, heard: heard.text.clone(), label, until: now.plus(CONFIRM_TIMEOUT) });
+            return Some(Pending { action, steps, summary, heard: heard.text.clone(), label, until: now.plus(CONFIRM_TIMEOUT), mic: None });
         }
         Decision::NoMatch { detail, log: line, copy_to_clipboard } => {
             say("no_match", "", &detail);
@@ -123,6 +133,32 @@ pub(super) fn handle_heard(
         type_dictation(ctx, heard, style, !in_text_field);
     }
     None
+}
+
+/// An "open X" pill names what was said ("FRAME"), but the launch looks X up by fuzzy match and may
+/// start another app (Brave). Name the app that will start. Other labels are left as they are.
+pub(super) fn launched_name(action: &ButtonAction, label: String, heard: &str) -> String {
+    #[cfg(windows)]
+    {
+        use oasis_core::actions::app_resolver::Resolved;
+        use oasis_platform::windows::app_discovery::resolve;
+        let spoken_target = heard.to_lowercase().contains(&label.to_lowercase());
+        if action.kind() != ActionKind::LaunchApp || !action.steps.is_empty() || action.value.contains('|') || label.starts_with("SWITCH ") || !spoken_target {
+            return label;
+        }
+        let lookup = oasis_core::voice::command::apps::launch_name(&action.value).unwrap_or(&action.value);
+        let path = match resolve(lookup) {
+            Some(Resolved::Shortcut(p) | Resolved::Exe(p)) => p,
+            _ => return label, // a Store app has only an id; the spoken name stays
+        };
+        let stem = std::path::Path::new(&path).file_stem().map(|s| s.to_string_lossy().to_uppercase());
+        stem.filter(|s| !s.is_empty()).unwrap_or(label)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (action, heard);
+        label
+    }
 }
 
 /// Whether the window in front is OASIS's own (the engine runs inside the desktop app).

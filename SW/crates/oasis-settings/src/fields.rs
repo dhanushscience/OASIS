@@ -234,7 +234,7 @@ pub fn set_field(settings: &mut Settings, id: &str, value: Value, ctx: &FieldCon
             _ => return bad(format!("{} must be one of the listed colours.", spec.label)),
         },
         Kind::Glossary { max } => match value.as_str() {
-            Some(text) => glossary_rows(text, spec.label, *max)?,
+            Some(text) => glossary_rows(text, spec.label, *max, matches!(spec.place, Place::Glossary("DictationGlossary")))?,
             None => return bad(format!("{} must be text.", spec.label)),
         },
     };

@@ -134,6 +134,16 @@ pub fn task_runs(exe: &Path) -> bool {
     task_command().is_some_and(|command| same_program(&command, exe))
 }
 
+/// Whether `exe` sits under one of `roots`. Windows paths ignore case, `Path::starts_with` doesn't.
+fn in_admin_only_dir(exe: &Path, roots: &[PathBuf]) -> bool {
+    let exe = exe.to_string_lossy().to_lowercase().replace('/', "\\");
+    roots.iter().any(|r| {
+        let root = r.to_string_lossy().to_lowercase().replace('/', "\\");
+        let root = root.trim_end_matches('\\');
+        !root.is_empty() && exe.strip_prefix(root).is_some_and(|rest| rest.starts_with('\\'))
+    })
+}
+
 fn same_program(command: &str, exe: &Path) -> bool {
     command.trim().trim_matches('"').eq_ignore_ascii_case(exe.to_string_lossy().trim())
 }
@@ -166,6 +176,16 @@ fn command_from_task_xml(xml: &str) -> Option<String> {
 /// Register the administrator task for `exe`. From a normal-level OASIS this shows one UAC
 /// prompt. False if the user declines or Windows refuses.
 pub fn install_admin_task(paths: &OasisPaths, exe: &Path, start_at_sign_in: bool) -> bool {
+    // The task runs `exe` elevated with no prompt, so a user-writable exe would be a free
+    // privilege escalation for anything running as this user.
+    let roots: Vec<PathBuf> =
+        ["ProgramFiles", "ProgramW6432"].iter().filter_map(|v| std::env::var_os(v)).map(PathBuf::from).collect();
+    if !in_admin_only_dir(exe, &roots) {
+        SecurityLog::at(paths.security_log()).write(
+            "Administrator mode refused: OASIS must be installed under Program Files, which only administrators can write to.",
+        );
+        return false;
+    }
     let Some(sid) = system::current_user_sid() else { return false };
     let xml = elevated_task_xml(&exe.to_string_lossy(), &sid, start_at_sign_in);
     let file = std::env::temp_dir().join(format!("oasis-admin-task-{}.xml", std::process::id()));
@@ -239,6 +259,15 @@ pub fn consume_window_request(app_data_root: &Path) -> Option<WindowRequest> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn admin_task_only_for_exe_under_program_files() {
+        let roots = [PathBuf::from(r"C:\Program Files")];
+        assert!(in_admin_only_dir(Path::new(r"c:\program files\OASIS\OASIS.exe"), &roots));
+        assert!(!in_admin_only_dir(Path::new(r"C:\Program Files Evil\OASIS.exe"), &roots));
+        assert!(!in_admin_only_dir(Path::new(r"C:\Users\a\AppData\Local\Programs\OASIS\OASIS.exe"), &roots));
+        assert!(!in_admin_only_dir(Path::new(r"C:\Program Files\OASIS.exe"), &[]));
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("oasis-startup-{name}-{}", std::process::id()));

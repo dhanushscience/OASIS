@@ -365,6 +365,22 @@ fn run_loop<T: PadTransport + 'static>(
                 }
                 Input::ForPress(info) => answers.push(info),
                 Input::Capture { dictate, focus_ms } => captured = Some((dictate, focus_ms)),
+                // Not while another question is up or a recording is going: the offer is simply dropped.
+                Input::MicOffer(name) if pending.is_none() && !voice_busy => {
+                    context.confirmation_pending = true;
+                    arbiter.set_context(context);
+                    shared.emit(EngineEvent::MicOffer { name: name.clone() });
+                    pending = Some(Pending {
+                        action: ButtonAction::default(),
+                        steps: Vec::new(),
+                        summary: String::new(),
+                        heard: name.clone(),
+                        label: String::new(),
+                        until: now.plus(MIC_OFFER_TIMEOUT),
+                        mic: Some(name),
+                    });
+                }
+                Input::MicOffer(_) => {}
                 Input::YouTube(event) => {
                     if oasis_core::bridge::youtube_watch::near_end_peek(&event, &mut last_near_end) && peek_until.is_none() && verified {
                         let _ = front.send(FrontAsk::Press { read: labels_possible(&settings) });
@@ -602,11 +618,13 @@ fn run_loop<T: PadTransport + 'static>(
 
         // An unanswered question is dropped after a while, never left hanging over the pad.
         if pending.as_ref().is_some_and(|ask| now >= ask.until) {
-            pending = None;
+            let timed_out = pending.take();
             context.confirmation_pending = false;
             arbiter.set_context(context);
             shared.emit(EngineEvent::ConfirmEnd { approved: false });
-            shared.emit(EngineEvent::Note { text: "The voice command was not confirmed in time, so it was cancelled.".into() });
+            if timed_out.is_some_and(|ask| ask.mic.is_none()) {
+                shared.emit(EngineEvent::Note { text: "The voice command was not confirmed in time, so it was cancelled.".into() });
+            }
         }
 
         for effect in effects {
@@ -619,7 +637,12 @@ fn run_loop<T: PadTransport + 'static>(
                         context.confirmation_pending = false;
                         arbiter.set_context(context);
                         shared.emit(EngineEvent::ConfirmEnd { approved });
-                        if approved {
+                        if let Some(name) = ask.mic {
+                            if approved {
+                                let ctx = oasis_settings::fields::FieldContext { microphones: vec![name.clone()], ..Default::default() };
+                                let _ = shared.change(|s| oasis_settings::fields::set_field(s, "voice.microphone", serde_json::json!(name), &ctx));
+                            }
+                        } else if approved {
                             let _ = shared.change(|s| {
                                 s.trust_voice_targets(&ask.steps);
                                 Ok(())
