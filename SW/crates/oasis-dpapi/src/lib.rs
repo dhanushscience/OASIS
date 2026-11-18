@@ -4,8 +4,8 @@
 //! the bytes only the same Windows user can decrypt. The blobs are byte-for-byte what the C#
 //! app wrote, so existing `secrets/*` files keep working.
 //!
-//! This is the only crate in the workspace that may use `unsafe`. The unsafe code is the
-//! `os` module below: two Win32 calls, with the buffers Windows hands back copied and freed.
+//! The workspace denies `unsafe`; this crate (like `oasis-win` and `oasis-voice`) opts out locally
+//! with `#[allow(unsafe_code)]`. Its unsafe code is the `os` module below: two Win32 calls, with the buffers Windows hands back copied and freed.
 
 use std::fmt;
 

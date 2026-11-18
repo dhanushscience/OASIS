@@ -21,9 +21,9 @@ tungstenite = "0.26"
 oasis-dpapi = { path = "../oasis-dpapi" }
 oasis-win = { path = "../oasis-win" }
 
-# Per-OS backend crates are added here as each backend is built (see README.md). Planned:
-#   all OSes : btleplug (BLE), cpal (mic), keyring (secrets)
-#   windows  : windows (Win32 / WinRT: foreground window, SendInput, GSMTC media, DPAPI)
+# Per-OS backend crates are added here as each backend is built (see README.md). BLE (btleplug)
+# lives in oasis-ble and audio capture (cpal) in oasis-voice, not here. Windows uses oasis-win and
+# oasis-dpapi (above). Planned:
 #   macos    : objc2 + objc2-app-kit (NSWorkspace, CGEvent, Accessibility)
 #   linux    : zbus (MPRIS media, BlueZ, Secret Service), x11rb / Wayland portals
 

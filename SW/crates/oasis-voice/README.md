@@ -7,8 +7,8 @@ this computer. Nothing is sent anywhere.
 
 **Why a separate crate:** it is the only place that touches the audio device and the speech engine's
 native code, so the rest of OASIS sees only the `SttEngine` trait and `AudioClip` (both from
-`oasis-models`). Like `oasis-win`, it is allowed `unsafe` (D13), with a `SAFETY:` note on each use.
-The crate denies `unsafe_code` and `sherpa.rs` allows it where needed.
+`oasis-models`). Like `oasis-win` and `oasis-dpapi`, it opts out of the workspace `unsafe_code` deny locally
+(`#[allow(unsafe_code)]`, D13), with a `SAFETY:` note on each use.
 
 **When:** the first time push-to-talk is used. The speech model takes a few seconds to load, so it
 loads on the first recording and stays loaded.

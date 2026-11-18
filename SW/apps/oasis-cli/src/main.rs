@@ -4,6 +4,8 @@
 //! oasis replay [--youtube] [--voice] [--ai] [--user-pad] [FILE]   replay timed pad lines
 //! oasis paths                                                     where OASIS keeps files here
 //! oasis status                                                    what works on this OS today
+//! oasis pc-check                                                  what this PC has and which voice model set it gets (Windows)
+//! oasis download-models <light|balanced|quality> <folder>         fetch a voice model set into a folder
 //! oasis do <Type> [Value]                                         run one button action, as a pad press would
 //! oasis address [PROCESS]                                         read a browser's address bar and show the profile it picks
 //! oasis run [--dry-run] [SECONDS]                                pad → profiles → actions, for real (Windows)

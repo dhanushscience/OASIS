@@ -1,12 +1,12 @@
 [package]
 name = "oasis-win"
-description = "Thin safe wrappers over the Win32 calls OASIS needs (foreground window, processes). With oasis-dpapi, the only crates allowed to use unsafe."
+description = "Thin safe wrappers over the Win32 calls OASIS needs (foreground window, processes). The workspace denies unsafe; this crate (like oasis-dpapi and oasis-voice) opts out locally with `#[allow(unsafe_code)]`."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
-# DECISIONS D13: unsafe is confined to OS-wrapper crates. Every `unsafe` block carries a
+# DECISIONS D13: unsafe is confined to OS-wrapper crates (oasis-win, oasis-dpapi, oasis-voice), each opting out with a local `#[allow(unsafe_code)]`. Every `unsafe` block carries a
 # SAFETY comment, and the public API is safe.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

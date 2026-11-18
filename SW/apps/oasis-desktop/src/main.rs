@@ -4,8 +4,8 @@
 //! its events to the page, and owns the tray and window. Closing the window hides it (OASIS keeps
 //! running in the tray); Quit in the tray menu stops it.
 //!
-//! It starts in preview mode: presses are shown but nothing runs until "Run actions" is switched
-//! on. That is deliberate while the Rust build is still replacing the C# app.
+//! It starts live (`defaults::windows::config(true)`): presses run their actions. Preview mode,
+//! where presses are only shown, is a switch.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

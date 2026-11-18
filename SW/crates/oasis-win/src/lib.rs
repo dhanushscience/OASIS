@@ -13,6 +13,13 @@
 //! | [`uia_panel`] | The focused control and its ancestors, and a scan of a window (IDE panel detection) | `Services/Context/UiFocusProbe.cs`, `WorkbenchRegionProbe.cs` |
 //! | [`hardware`] | Processor, AVX2, cores, memory, free disk, graphics cards (voice model choice) | New |
 //! | [`network`] | Offline, metered or ordinary connection (model downloads wait on metered) | New |
+//! | [`audio`] | Play a finished WAV recording from memory | `OfflineTtsService.cs` (NAudio) |
+//! | [`desktop`] | List app windows, read and move them (Quick Launch) | `Features/QuickLaunch/Win32QuickLaunchDesktop.cs` |
+//! | [`job`] | Helper programs that end when OASIS ends (job object) | New |
+//! | [`keyboard`] | Low-level keyboard hook, so a shortcut can stand in for a pad button | New |
+//! | [`media`] | What is playing, pause and resume only that | New |
+//! | [`power`] | On battery, Battery Saver | New |
+//! | [`watch`] | Tells when something in a folder was written | New |
 //! | [`system`] | Elevation, user SID, single-copy lock, login-startup Run key | `ProcessElevation`, `SingleInstanceLock`, `AutostartService` |
 
 #[cfg(windows)]

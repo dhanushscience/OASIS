@@ -10,7 +10,7 @@
 //!    [`crash_log`] (a logger that never throws).
 //! 2. **Ports** ([`ports`]) — one trait per OS feature (BLE pad link, foreground app, key
 //!    injection, secrets, media sessions, microphone, autostart). Each OS module
-//!    ([`windows`], [`macos`], [`linux`]) states which backend will implement each trait and
+//!    ([`windows`], [`macos`], [`linux`]) says where each trait is (or will be) implemented and
 //!    reports today's status honestly through [`backend_status`].
 //!
 //! The rest of the app talks only to the traits, so a missing backend shows up as a

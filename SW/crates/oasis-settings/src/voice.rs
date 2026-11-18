@@ -5,9 +5,8 @@
 use serde_json::Value;
 
 use crate::model::Settings;
+use crate::schema::DEFAULT_STT_MODEL_FOLDER;
 
-/// The default speech model folder under `Models\stt`, as in C# (`VoiceSettings.DefaultSttModelFolder`).
-pub const DEFAULT_STT_MODEL_FOLDER: &str = "parakeet-tdt-0.6b-v2";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VoiceSettings {

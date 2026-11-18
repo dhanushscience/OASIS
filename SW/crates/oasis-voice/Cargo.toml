@@ -1,6 +1,6 @@
 [package]
 name = "oasis-voice"
-description = "Microphone capture and the on-device speech-to-text engine (sherpa-onnx, loaded at run time). With oasis-win and oasis-dpapi, the only crates allowed to use unsafe."
+description = "Microphone capture and the on-device speech-to-text engine (sherpa-onnx, loaded at run time). The workspace denies unsafe; this crate (like oasis-win and oasis-dpapi) opts out locally with `#[allow(unsafe_code)]`."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,7 +11,7 @@ oasis-models = { path = "../oasis-models" }
 cpal = "0.15"
 libloading = "0.8"
 
-# DECISIONS D13: unsafe is confined to OS/native wrapper crates, every block with a SAFETY note.
+# DECISIONS D13: unsafe is confined to OS/native wrapper crates (oasis-win, oasis-dpapi, oasis-voice) that opt out locally, every block with a SAFETY note.
 [lints.rust]
 unsafe_code = "deny"
 unused_must_use = "deny"

@@ -24,7 +24,7 @@ Sub-folders, each with its own README:
 - `src/overlay.rs`: `OverlayAppearance`, `overlay_appearance`, `overlay_position`, `css_color`, `popup_vertical`, `POPUP` (`"VoicePopup"`), `DOCKS`, `IDLE_MODES`.
 - `src/input.rs`: `InputSettings`, `DEFAULT_KEYS`, `VERTICAL_KEYS`, `preset_keys`, `check_keys`; `Settings::set_input`, `Settings::choose_layout`.
 - `src/system.rs`: `start_with_windows`, `run_as_administrator`, `read_run_as_administrator`; `Settings::set_start_with_windows`, `Settings::set_run_as_administrator`.
-- `src/voice.rs`: `VoiceSettings` (`VoiceSettings::from(&Settings)`), `DEFAULT_STT_MODEL_FOLDER` (a second copy of the one in `schema.rs`).
+- `src/voice.rs`: `VoiceSettings` (`VoiceSettings::from(&Settings)`); the default model folder comes from `schema.rs`.
 - `src/voice_commands.rs`: `CaptureMode`, `capture_mode`, `dictate_first_apps`, `is_dictate_first`, `router_settings`, `approval_mode`, `lexicon`, `trusted_targets`; `Settings::trust_voice_targets`.
 - `src/quick_launch.rs`: `Setup`, `Item`, `ItemKind`, `ItemEdit`, `SetupEdit`, `setups`, `voice_refs`, `startup_setup`, `find`, `step_of`, `without_blocked`, `to_action`; `Settings::save_setup`, `Settings::delete_setup`.
 - `src/meetings.rs`: `MeetingSettings` (`MeetingSettings::from(&Settings)`).

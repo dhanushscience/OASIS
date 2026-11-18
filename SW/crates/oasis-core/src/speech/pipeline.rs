@@ -129,7 +129,7 @@ pub fn correct(request: &CleanupRequest) -> CleanupResult {
     run(request)
 }
 
-/// Overlap merge still runs in the session; this skips filler, revision and glossary.
+/// The text with only its whitespace tidied: no filler, revision or glossary step.
 pub fn identity(request: &CleanupRequest) -> CleanupResult {
     CleanupResult {
         corrected_text: collapse_whitespace(&request.raw_text),

@@ -23,7 +23,7 @@ as-is, instead of a crash.
 
 | Path | Status | Contents |
 |---|---|---|
-| `src/lib.rs` | ✅ | `Os::current()`, `Os::name()`, `backend_status()` (every OS still reports `not_built_yet`) |
+| `src/lib.rs` | ✅ | `Os::current()`, `Os::name()`, `backend_status()` (Windows reports pad, foreground/browser and speech-to-text as available; macOS and Linux still report `not_built_yet`) |
 | `src/browser_bridge.rs` | ✅ | `BridgeServer` (`start`, `port`, `clients`, `send_command`, `push_settings`, `stop`), `BridgeEvent`, `DEFAULT_PORT`, `write_token_files`. Threads: `oasis-bridge-accept`, one `oasis-bridge-client` per connection |
 | `src/extension_install.rs` | ✅ | `ensure_published`, `published_folder`, `bundled_source_candidates`, `EXTENSION_FOLDER_NAME` |
 | `src/foreground.rs` | ✅ | `ForegroundTracker` (`current_for_press`, `set_url_profiles_exist`, `set_panel_profiles_exist`, `read`), `WindowSnapshot`, `WindowSource` |

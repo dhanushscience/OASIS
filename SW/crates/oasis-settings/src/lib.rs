@@ -14,6 +14,15 @@
 //! | [`arbiter_bridge`] | `Services/ArbiterSettingsBridge.cs` | Gesture settings → the arbiter config |
 //! | [`edit`] | new | Validated edits for a settings window (buttons, profile names and matches) |
 //! | [`overlay`] | `OverlayAppearanceSettings`, `OverlayWindow` position | The overlay's look and saved position, checked for a web page |
+//! | [`fields`] | new | The simple settings, each described once (label, place in the file, limits, default) |
+//! | [`input`] | new | Which ways of pressing the buttons are on (pad, keyboard) and the keyboard keys |
+//! | [`meetings`] | new | Meeting reminders and how early a meeting can be joined |
+//! | [`quick_launch`] | `QuickLaunchModel.cs`, `QuickLaunchService.cs` (reading) | The Quick Launch setups |
+//! | [`system`] | new | `StartWithWindows` and `RunAsAdministrator` |
+//! | [`voice`] | `VoiceSettings` | The voice settings this build uses (push-to-talk, microphone, model) |
+//! | [`voice_commands`] | `VoiceSettings`, `VoiceLexicon`, `IntentTrustedTargetStore` | Spoken-command settings, vocabulary, approved targets |
+//! | [`youtube`] | `Services/OverlayService.cs` (rules) | YouTube and browser-bridge settings, when the YouTube gesture is live |
+//! | `profile_ext` | `Services/ProfileExtensions.cs` | Read-only profile helpers and button → action conversion (private) |
 
 pub mod arbiter_bridge;
 pub mod edit;

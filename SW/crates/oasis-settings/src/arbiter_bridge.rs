@@ -1,8 +1,8 @@
 //! Port of `Services/ArbiterSettingsBridge.cs`: the gesture settings in `profiles.json`
 //! (`YouTube`, `Voice`, `Ai`, `PadGestures`, `ShowOverlayLabels`) become the arbiter's config.
 //!
-//! Those sections are not typed in this crate yet (they stay raw JSON), so they are read here
-//! by name with the C# defaults for anything missing.
+//! Those sections are read here by name from the raw JSON (`settings.extra`), with the C# defaults
+//! for anything missing. Double-click for volume on YouTube is switched off whatever the file says.
 
 use std::time::Duration;
 

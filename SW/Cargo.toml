@@ -7,7 +7,7 @@
 #   oasis-platform  ← Oasis.Adapters.Windows + Platform/ (per-OS: Windows, macOS, Linux)
 #   apps/oasis-cli  ← headless harness to drive the pipeline without hardware or UI
 #
-# See README.md for the folder map and docs/PORTING.md for what is ported so far.
+# See README.md for the folder map and what is ported so far.
 
 [workspace]
 resolver = "2"
@@ -31,7 +31,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/your-org/oasis"
+repository = "https://github.com/dhanushscience/OASIS"
 rust-version = "1.82"
 
 [workspace.lints.rust]

@@ -2,8 +2,6 @@
 
 use super::*;
 
-/// What was heard goes to the focused app as typing, like a keyboard. In preview mode, or with a
-/// bad signature, it is shown and not typed.
 /// How the program in front wants dictation written (`docs/VOICE_DECISIONS.md` V7).
 pub(crate) fn dictation_style(foreground: &mut dyn ForegroundProbe) -> Style {
     foreground.current().map_or(Style::Default, |info| {
@@ -12,6 +10,8 @@ pub(crate) fn dictation_style(foreground: &mut dyn ForegroundProbe) -> Style {
     })
 }
 
+/// What was heard goes to the focused app as typing, like a keyboard. In preview mode, or with a
+/// bad signature, it is shown and not typed.
 /// `keep_on_clipboard`: no text field was found, so the paste may land nowhere; the text then stays on
 /// the clipboard for the user to paste (the paste puts the old clipboard back, which is this text).
 ///

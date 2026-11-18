@@ -8,8 +8,8 @@ pub struct ForegroundContext {
     /// Address-bar text when the foreground app is a browser and it could be read.
     pub url: String,
     pub window_title: String,
-    /// Which part of an app has focus (an IDE's terminal, say). Empty until the panel probes
-    /// are ported, which makes every multi-config profile fall back to its primary config.
+    /// Which part of an app has focus (an IDE's terminal, say). Empty when no panel was
+    /// detected (see `matching/panel`), which makes a multi-config profile fall back to its primary config.
     pub panel_id: String,
     pub panel_label: String,
     pub app_family: String,

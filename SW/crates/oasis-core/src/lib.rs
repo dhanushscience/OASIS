@@ -20,6 +20,11 @@
 //! | [`actions`] | `Services/ActionExecutor.cs` (rules), `Services/UrlLaunchPolicy.cs` | What a button does, what is allowed, how an automation runs |
 //! | [`pad_connect`] | `Services/BleManager.cs` (policy) | When to connect to the pad, back-off, trust, ping rate |
 //! | [`speech`] | `Oasis.Core/Speech/*` | Cleaning up dictated text: punctuation words, numbers, corrections, fillers, glossary, lists |
+//! | [`battery`] | `Services/DeviceStatusService.cs`, `BatterySocFormatter.cs` | When to warn that the pad's battery is low |
+//! | [`meetings`] | `Services/Meetings/*` (pure parts) | Which meeting is joinable, when to remind |
+//! | [`onboarding`] | New | Getting Started: which step the first-run guide is on |
+//! | [`placement`] | Quick Launch placement | Where windows go: halves, screens, which window belongs to which item |
+//! | [`quick_launch`] | `QuickLaunch/QuickLaunchVoice.cs` | Saying a setup's name opens everything in it |
 //! | [`startup`] | `Oasis.Core/Elevation/ElevatedStartTask.cs`, `Services/Elevation/AdminMode.cs` (rules) | Launch arguments, when to hand over to the administrator copy, the scheduled-task definition |
 
 pub mod actions;
