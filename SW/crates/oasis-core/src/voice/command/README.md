@@ -25,6 +25,7 @@ Re-exports in `mod.rs`: `build_lexicon`, `LabeledAction`, `LexiconEntry`, `Lexic
 | `volume.rs` | `plan` (volume phrases as media-key `Automation`) |
 | `spotify.rs` | `Phrase`, `parse`, `QueryKind`, `classify_query`, `pick_track`, `pick_playlist`, `pick_album_or_artist`, `pick_device`, `seek_ms` |
 | `window_cmd.rs` | `plan` (`WindowCommand`, `WindowSplit`, `WindowLayout`), `Arrangement`, `arrangements` |
+| `decide.rs` | `decide`, `Facts`, `Decision`, `Decided`, `launch_target_exists`: the whole type-or-run call for one phrase |
 | `safety.rs` | `SafetyTier`, `ApprovalMode`, `step_tier`, `evaluate`, `decide`, `fast_path`, `FastPath`, `target_key`, `names_a_shell` |
 
 ## Invariants
@@ -37,7 +38,7 @@ Re-exports in `mod.rs`: `build_lexicon`, `LabeledAction`, `LexiconEntry`, `Lexic
 - Known gaps: "tomorrow", dates and "1.5 hours" are not understood in reminders; volume levels are reached by media-key presses at 2% per step (`volume.rs`, shortcut).
 
 ## Side Effects
-- None. Results are action descriptions; the engine runs them and owns reminders, app existence checks and the Spotify API.
+- None. Results are action descriptions (`decide` also picks every message and security-log line); the engine runs them and owns reminders, app existence checks and the Spotify API.
 
 ## Verification
 - Run: `cargo test -p oasis-core`

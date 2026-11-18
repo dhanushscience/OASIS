@@ -9,10 +9,9 @@ use std::time::{Duration, Instant as StdInstant};
 
 use oasis_app::{ArbiterHost, PadLink};
 use oasis_core::bridge::{ConfigWhen, YouTubeWatchEvent, YouTubeWatchState};
-use oasis_core::voice::command::{gate, intent};
+use oasis_core::voice::command::decide::{decide, launch_target_exists, Decision, Facts};
 use oasis_core::voice::command::RouterSettings;
-use oasis_core::voice::command::safety::{fast_path, steps_of, FastPath, SafetyTier};
-use oasis_core::voice::command::text::is_usable_command;
+use oasis_core::voice::command::safety::steps_of;
 use oasis_core::voice::command::{route, RunningApp};
 use oasis_core::voice::VoiceEvent;
 use oasis_core::speech::pipeline as cleanup_pipeline;
@@ -1225,11 +1224,9 @@ struct SpokenContext<'a> {
     watch_token: &'a str,
 }
 
-/// Something was said. The intent gate (`docs/VOICE_DECISIONS.md` V3, V4) decides: with a text
-/// field in front (`heard.dictate`), it is typed unless the transcript is a clear command whose
-/// target exists (`intent::judge`: "open Chrome", "close WhatsApp" with WhatsApp open); with none,
-/// it is a command. Returns a question for
-/// the pad when the command needs approval or was a near miss.
+/// Something was said. `decide` (`docs/VOICE_DECISIONS.md` V3, V4) says whether it is typed, run,
+/// asked about or reported; this gathers what it needs from the PC and carries it out. Returns a
+/// question for the pad when the command needs approval or was a near miss.
 fn handle_heard(
     ctx: &SpokenContext<'_>,
     foreground: &mut dyn ForegroundProbe,
@@ -1239,269 +1236,95 @@ fn handle_heard(
     now: Instant,
 ) -> Option<Pending> {
     let in_text_field = heard.dictate;
-    // A fragment said on its own ("insert my LinkedIn") types its text exactly (V5), in a text
-    // field or not. Without one it is typing by voice, so it follows that setting.
-    if let Some(text) = oasis_core::speech::fragments::whole_phrase(&heard.text, &VoiceSettings::from(ctx.settings).replacements) {
-        if in_text_field || voice_router_settings(ctx.settings).allow_type_text {
-            let value = if text.ends_with(char::is_whitespace) { text.to_string() } else { format!("{text} ") };
-            paste_typed(ctx.shared, ctx.settings, ctx.verified, ctx.jobs, text, value);
-        } else {
-            ctx.shared.emit(EngineEvent::VoiceCommand {
-                heard: heard.text.clone(),
-                label: "FRAGMENT".into(),
-                outcome: "blocked".into(),
-                detail: "Typing text by voice is off in Settings.".into(),
-            });
-        }
-        return None;
-    }
-    let phrase = gate::prepare(&heard.text);
-    if !in_text_field && gate::is_prose_about_writing(&phrase) {
-        let style = dictation_style(foreground);
-        type_dictation(ctx, heard, style, true);
-        return None;
-    }
-    let spoken = SpokenPhrase { transcript: &heard.text, phrase: &phrase, in_text_field };
-    match run_spoken_command(ctx, foreground, &running, installed, &spoken, now) {
-        Spoken::Handled(ask) => ask,
-        // Not a command after all: in a text field, it was meant to be typed.
-        Spoken::NotACommand => {
-            let style = dictation_style(foreground);
-            type_dictation(ctx, heard, style, !in_text_field);
-            None
-        }
-    }
-}
+    let voice = VoiceSettings::from(ctx.settings);
+    let router = voice_router_settings(ctx.settings);
+    let glossary: Vec<GlossaryEntry> = voice.dictation_glossary.iter().map(|(s, c)| GlossaryEntry::new(s, c)).collect();
+    let trusted = trusted_targets(ctx.settings);
+    let facts = Facts {
+        transcript: &heard.text,
+        in_text_field,
+        fragments: &voice.replacements,
+        glossary: &glossary,
+        allow_type_text: router.allow_type_text,
+        edit_commands: router.edit_commands,
+        verified: ctx.verified,
+        live: ctx.shared.live.load(Ordering::SeqCst),
+        trusted: &trusted,
+        approval: approval_mode(ctx.settings),
+    };
+    let mut route_text = |text: &str| {
+        let active = foreground.current_for_press().ok().and_then(|info| {
+            let found = resolve_active_profile(&ctx.settings.profiles, &ForegroundContext::from(&info), ctx.watch_token)?;
+            Some((found.profile, found.config?))
+        });
+        let lexicon = voice_lexicon(ctx.settings, active, &running);
+        route(
+            text,
+            &lexicon,
+            &RouterSettings {
+                now: Some(local_now()),
+                spotify_running: running.iter().any(|a| a.process.eq_ignore_ascii_case("spotify")),
+                running: running.clone(),
+                // "cloud" means Claude only on a PC that has it.
+                installed: Some(["claude", "whatsapp", "kicad"].iter().filter(|a| installed(a)).map(|a| a.to_string()).collect()),
+                ..voice_router_settings(ctx.settings)
+            },
+        )
+    };
+    let exists = |app: &str| launch_target_exists(app, &running, installed);
+    let decided = decide(&facts, &mut route_text, &exists, &starts_a_shell);
 
-/// A phrase on its way to being run: what was heard, what the gate made of it, and whether a
-/// text field had focus.
-struct SpokenPhrase<'a> {
-    transcript: &'a str,
-    phrase: &'a gate::Phrase,
-    in_text_field: bool,
-}
-
-/// What became of a phrase tried as a command.
-enum Spoken {
-    /// Run, asked about, refused or reported; maybe with a question for the pad.
-    Handled(Option<Pending>),
-    /// In a text field, and not a sure command: type it instead.
-    NotACommand,
-}
-
-/// Whether the program a `LaunchApp` names is really there: running now, installed, or a browser
-/// with a page (`chrome|youtube.com`). A spoken "open the door" names nothing.
-fn launch_target_exists(value: &str, running: &[RunningApp], installed: &dyn Fn(&str) -> bool) -> bool {
-    value.contains('|') || oasis_core::voice::command::router::find_running(value, running).is_some() || installed(value)
-}
-
-fn run_spoken_command(
-    ctx: &SpokenContext<'_>,
-    foreground: &mut dyn ForegroundProbe,
-    running: &[RunningApp],
-    installed: &dyn Fn(&str) -> bool,
-    spoken: &SpokenPhrase<'_>,
-    now: Instant,
-) -> Spoken {
-    let (transcript, phrase, in_text_field) = (spoken.transcript, spoken.phrase, spoken.in_text_field);
     let say = |outcome: &str, label: &str, detail: &str| {
         ctx.shared.emit(EngineEvent::VoiceCommand {
-            heard: transcript.to_string(),
+            heard: heard.text.clone(),
             label: label.to_string(),
             outcome: outcome.to_string(),
             detail: detail.to_string(),
         });
     };
     let log = SecurityLog::at(ctx.shared.paths.security_log());
-
-    if !is_usable_command(transcript) || phrase.command.is_empty() {
-        if in_text_field {
-            return Spoken::NotACommand;
-        }
-        say("ignored", "", "Heard nothing usable.");
-        log.write(&format!("Voice ignored (empty/noise): \"{transcript}\""));
-        return Spoken::Handled(None);
+    for text in decided.notes {
+        ctx.shared.emit(EngineEvent::Note { text });
     }
-    // "search this" with nothing after it (or cut off): no browser, no question, not typed (W15).
-    if oasis_core::voice::command::web_search::is_empty_search(&phrase.command) {
-        say("ignored", "", "A search with nothing to search for.");
-        log.write(&format!("Voice ignored (empty search): \"{transcript}\""));
-        return Spoken::Handled(None);
-    }
-    // The user's dictionary fixes words the speech model keeps hearing wrong, for commands as for dictation.
-    let words: Vec<GlossaryEntry> = VoiceSettings::from(ctx.settings).dictation_glossary.iter().map(|(s, c)| GlossaryEntry::new(s, c)).collect();
-    let text = oasis_core::speech::glossary::apply(&phrase.command, &words).0;
-
-    let active = foreground.current_for_press().ok().and_then(|info| {
-        let found = resolve_active_profile(&ctx.settings.profiles, &ForegroundContext::from(&info), ctx.watch_token)?;
-        Some((found.profile, found.config?))
-    });
-    let lexicon = voice_lexicon(ctx.settings, active, running);
-    let routed = route(
-        &text,
-        &lexicon,
-        &RouterSettings {
-            now: Some(local_now()),
-            spotify_running: running.iter().any(|a| a.process.eq_ignore_ascii_case("spotify")),
-            running: running.to_vec(),
-            // "cloud" means Claude only on a PC that has it.
-            installed: Some(["claude", "whatsapp", "kicad"].iter().filter(|a| installed(a)).map(|a| a.to_string()).collect()),
-            ..voice_router_settings(ctx.settings)
-        },
-    );
-    // An app that is not on this PC is no command: "open the door" stays words, "open chatgpt" opens
-    // the site. In "open X on … and open Y on …" the apps that are there still open.
-    let exists = |app: &str| launch_target_exists(app, running, installed);
-    let (found, missing) = match routed.action.clone().filter(|_| routed.success) {
-        Some(action) => without_missing_apps(intent::site_for_missing_app(action, &exists), &exists),
-        None => (None, Vec::new()),
-    };
-    // With a text field in front, the transcript and its target must make a clear command; an
-    // unsure phrase is typed into the field (intent::judge). Without one, the flow below decides.
-    let evidence = intent::found(routed.success, routed.score, found.as_ref());
-    let verdict = intent::judge(transcript, phrase, evidence, found.as_ref().map_or(SafetyTier::Safe, intent::tier), in_text_field, voice_router_settings(ctx.settings).edit_commands);
-    let found = found.filter(|_| !in_text_field || verdict.command);
-    let Some(action) = found else {
-        // Nothing sure to run. In a text field it was meant to be typed; with no field found it is
-        // typed too when it reads as prose ("I want to write an email…"), so a dictation is not lost
-        // because the field was never clicked. One sentence that starts like a command and
-        // matched nothing ("open the dor") is still reported, not typed.
-        let prose = !gate::reads_as_command(phrase);
-        if (in_text_field || prose) && !phrase.addressed {
-            return Spoken::NotACommand;
+    let typed = match decided.decision {
+        Decision::PasteFragment { shown, value } => {
+            paste_typed(ctx.shared, ctx.settings, ctx.verified, ctx.jobs, &shown, value);
+            false
         }
-        let (ask, no_match) = offer_or_report(ctx, &routed, running, installed, transcript, now);
-        // Never lose a transcript (1.7): a no_match that is long or does not start like a command
-        // may be dictation into a field that was not found (or not readable): type it, and keep it
-        // on the clipboard. A short command-like miss is reported and copied.
-        if no_match && !phrase.addressed && (phrase.words > 4 || !oasis_core::voice::command::classifier::looks_like_command(&phrase.command)) {
-            ctx.shared.emit(EngineEvent::Note { text: "That matched no command, so it was typed as text and kept on the clipboard.".into() });
-            return Spoken::NotACommand;
+        Decision::Type => true,
+        Decision::Report { outcome, label, detail, log: line } => {
+            say(outcome, &label, &detail);
+            if let Some(line) = line {
+                log.write(&line);
+            }
+            false
         }
-        if no_match && ctx.verified && ctx.shared.live.load(Ordering::SeqCst) {
-            let _ = oasis_win::clipboard::set_text(transcript);
-            ctx.shared.emit(EngineEvent::Note { text: "What you said is on the clipboard, in case it was meant as text.".into() });
+        Decision::Run { action, label } => {
+            run_voice_action(ctx.shared, ctx.jobs, &action, &label, &heard.text);
+            false
         }
-        return Spoken::Handled(ask);
-    };
-    for app in &missing {
-        ctx.shared.emit(EngineEvent::Note { text: format!("There is no app called \"{app}\" on this PC; the rest still runs.") });
-    }
-    if !ctx.verified {
-        say("blocked", &routed.label, "Voice actions are off: profiles.json did not match its signature.");
-        return Spoken::Handled(None);
-    }
-
-    if starts_a_shell(&action) {
-        log.write(&format!("Voice launch refused, it starts a shell: \"{text}\" → {}", action.value));
-        say("blocked", &routed.label, "Blocked for safety.");
-        return Spoken::Handled(None);
-    }
-    let trusted = trusted_targets(ctx.settings);
-    match fast_path(&action, &trusted, approval_mode(ctx.settings)) {
-        FastPath::Refuse => {
-            log.write(&format!("Voice fast path refused: \"{text}\" → {} / {}", action.kind, action.value));
-            say("blocked", &routed.label, "Blocked for safety.");
-            Spoken::Handled(None)
-        }
-        FastPath::Run => {
-            run_voice_action(ctx.shared, ctx.jobs, &action, &routed.label, transcript);
-            Spoken::Handled(None)
-        }
-        FastPath::Ask if !ctx.shared.live.load(Ordering::SeqCst) => {
-            say("preview", &routed.label, "It would ask first. Actions are off, so nothing happened.");
-            Spoken::Handled(None)
-        }
-        FastPath::Ask => {
+        Decision::Ask { action, label, summary } => {
+            say("asking", &label, &summary);
             let steps = steps_of(&action);
-            let summary = format!("Run “{}”?  Button 1: run · Button 2: cancel", routed.label);
-            say("asking", &routed.label, &summary);
-            Spoken::Handled(Some(Pending {
-                action,
-                steps,
-                summary,
-                heard: transcript.to_string(),
-                label: routed.label,
-                until: now.plus(CONFIRM_TIMEOUT),
-            }))
+            return Some(Pending { action, steps, summary, heard: heard.text.clone(), label, until: now.plus(CONFIRM_TIMEOUT) });
         }
-    }
-}
-
-/// `action` without the apps that are not on this PC, and their names. One app: no action at all.
-/// Several ("open X on … and open Y on …"): the missing app's launch and the move of its window
-/// go, and what is left runs, as long as it still opens something.
-fn without_missing_apps(action: ButtonAction, exists: &dyn Fn(&str) -> bool) -> (Option<ButtonAction>, Vec<String>) {
-    let is_launch = |kind: &str| kind.eq_ignore_ascii_case("LaunchApp");
-    if !action.kind.eq_ignore_ascii_case("Automation") {
-        if is_launch(&action.kind) && !exists(&action.value) {
-            return (None, vec![action.value]);
+        Decision::NoMatch { detail, log: line, then_type, copy_to_clipboard } => {
+            say("no_match", "", &detail);
+            log.write(&line);
+            if then_type {
+                ctx.shared.emit(EngineEvent::Note { text: "That matched no command, so it was typed as text and kept on the clipboard.".into() });
+            } else if copy_to_clipboard {
+                let _ = oasis_win::clipboard::set_text(&heard.text);
+                ctx.shared.emit(EngineEvent::Note { text: "What you said is on the clipboard, in case it was meant as text.".into() });
+            }
+            then_type
         }
-        return (Some(action), Vec::new());
-    }
-    let (mut missing, mut steps, mut skip_window) = (Vec::new(), Vec::new(), false);
-    for step in action.steps {
-        if is_launch(&step.kind) && !exists(&step.value) {
-            missing.push(step.value);
-            skip_window = true;
-            continue;
-        }
-        if std::mem::take(&mut skip_window) && step.kind.eq_ignore_ascii_case("WindowCommand") {
-            continue;
-        }
-        steps.push(step);
-    }
-    if !missing.is_empty() && !steps.iter().any(|s| is_launch(&s.kind)) {
-        return (None, missing);
-    }
-    (Some(ButtonAction { kind: action.kind, value: action.value, steps }), missing)
-}
-
-/// Nothing sure was heard. If one thing came close, it is safe and it exists, ask about it on the
-/// pad ("Did you mean …?"); never run it unasked. Otherwise say it was not understood.
-fn offer_or_report(
-    ctx: &SpokenContext<'_>,
-    routed: &oasis_core::voice::command::RouteResult,
-    running: &[RunningApp],
-    installed: &dyn Fn(&str) -> bool,
-    transcript: &str,
-    now: Instant,
-) -> (Option<Pending>, bool) {
-    let say = |outcome: &str, label: &str, detail: &str| {
-        ctx.shared.emit(EngineEvent::VoiceCommand {
-            heard: transcript.to_string(),
-            label: label.to_string(),
-            outcome: outcome.to_string(),
-            detail: detail.to_string(),
-        });
     };
-    let trusted = trusted_targets(ctx.settings);
-    let offer = routed
-        .suggestion
-        .clone()
-        .filter(|(a, _)| ctx.verified && fast_path(a, &trusted, approval_mode(ctx.settings)) != FastPath::Refuse)
-        .filter(|(a, _)| !a.kind.eq_ignore_ascii_case("LaunchApp") || launch_target_exists(&a.value, running, installed));
-    if let Some((action, label)) = offer {
-        if !ctx.shared.live.load(Ordering::SeqCst) {
-            say("preview", &label, "It would ask whether you meant this. Actions are off, so nothing happened.");
-            return (None, false);
-        }
-        let summary = format!("Did you mean “{label}”?  Button 1: run · Button 2: cancel");
-        say("asking", &label, &summary);
-        let steps = steps_of(&action);
-        return (Some(Pending { action, steps, summary, heard: transcript.to_string(), label, until: now.plus(CONFIRM_TIMEOUT) }), false);
+    if typed {
+        let style = dictation_style(foreground);
+        type_dictation(ctx, heard, style, !in_text_field);
     }
-    // The app that is missing, also when it is one step of "open X on … and open Y on …".
-    let missing = routed.action.as_ref().and_then(|a| {
-        steps_of(a).into_iter().find(|(kind, value)| kind.eq_ignore_ascii_case("LaunchApp") && !launch_target_exists(value, running, installed))
-    });
-    let detail = match missing {
-        Some((_, app)) => format!("There is no app called \"{app}\" on this PC."),
-        None => routed.message.clone().unwrap_or_else(|| "No match.".into()),
-    };
-    say("no_match", "", &detail);
-    SecurityLog::at(ctx.shared.paths.security_log()).write(&format!("Voice no_match: \"{transcript}\" ({detail})"));
-    (None, true)
+    None
 }
 
 /// How often the app in front is looked at for the window's "just used" and "in front".
