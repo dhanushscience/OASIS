@@ -1,6 +1,6 @@
 {
   "release": "models-2026.11",
-  "base_url": "https://github.com/dhanushscience/OASIS/releases/download/models-2026.11/",
+  "base_url": "https://github.com/dhanushscience/PROJECT-OASIS/releases/download/models-2026.11/",
   "files": [
     {
       "asset": "parakeet-tdt-0.6b-v2.encoder.int8.onnx",
