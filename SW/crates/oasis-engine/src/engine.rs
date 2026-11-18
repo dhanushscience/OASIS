@@ -46,7 +46,7 @@ use crate::reminders::Reminders;
 use crate::use_counts::UseCounts;
 use oasis_core::voice::command::reminders::{self as phrases, LocalTime};
 use crate::events::{EngineEvent, EngineStatus, FrontApp, Press};
-use crate::inbox::{FrontAsk, Input, SharedProbe};
+use crate::inbox::{FrontAsk, FrontSnapshot, Input};
 use crate::voice::{Heard, Voice, VoiceContext, VoiceParts};
 
 // The engine's features, one file each in `engine/`. They share this module's names (`use super::*`).
@@ -91,6 +91,8 @@ enum Need {
     Tap(Gesture),
     /// Show the labels for `duration`; `only_if_clear`: not if labels already show (the YouTube near-end peek).
     Peek { duration: Duration, watch_token: String, only_if_clear: bool },
+    /// A finished recording: typed or run against what is in front when it was handed over.
+    Heard(Heard),
 }
 
 /// A capture the gesture rules began, waiting for "typed or a command?" from the front thread. Its
@@ -118,15 +120,14 @@ fn run_loop<T: PadTransport + 'static>(
     // Looking for the pad holds a thread for up to 1.5 s, so the pad has a thread of its own.
     let (power, power_rx) = mpsc::channel::<bool>();
     let pad_thread = crate::inbox::spawn_pad(connector, start, power_rx, shared.inbox.clone());
-    // Reading what is in front goes through UI Automation and can take a second: the front thread
-    // does it. Spoken commands still read it here, through the same probe.
+    // Reading what is in front goes through UI Automation and can take a second: only the front
+    // thread does it. The loop asks it and handles the answer (presses, peeks, spoken phrases).
     let focus_probe = voice_parts
         .as_mut()
         .map(|p| std::mem::replace(&mut p.editable_focus, Box::new(|| false)))
         .unwrap_or_else(|| Box::new(|| false));
-    let mut foreground = SharedProbe(Arc::new(Mutex::new(foreground)));
     let (front, front_rx) = mpsc::channel::<FrontAsk>();
-    let front_thread = crate::inbox::spawn_front(foreground.clone(), focus_probe, front_rx, shared.inbox.clone());
+    let front_thread = crate::inbox::spawn_front(foreground, focus_probe, front_rx, shared.inbox.clone());
 
     // Which ways of pressing the buttons are on: the pad, and the keyboard.
     let mut buttons = buttons;
@@ -578,29 +579,14 @@ fn run_loop<T: PadTransport + 'static>(
             }
             crate::activity::set_voice_active(!voice.is_idle());
             for heard in voice.tick(now, &ctx) {
-                let spoken = SpokenContext {
-                    shared,
-                    settings: &settings,
-                    verified,
-                    jobs,
-                    watch_token,
-                };
-                let (timing, dictate, words) = (
-                    heard.timing,
-                    heard.dictate,
-                    heard.text.split_whitespace().count(),
-                );
+                let (timing, dictate, words) = (heard.timing, heard.dictate, heard.text.split_whitespace().count());
                 let text_ms = timing.released.map(|r| r.elapsed().as_millis());
-                let installed = |name: &str| voice.app_installed(name);
-                let ask = handle_heard(&spoken, &mut foreground, voice.running_apps(), &installed, heard, now);
                 log_voice_timing(shared, &settings, timing, dictate, words, text_ms);
-                if let Some(ask) = ask {
-                    context.confirmation_pending = true;
-                    arbiter.set_context(context);
-                    let front = foreground.current().map(|i| ForegroundContext::from(&i).app_name).unwrap_or_default();
-                    shared.emit(EngineEvent::Confirm { summary: ask.summary.clone(), close: close_target(&ask.action, &front) });
-                    pending = Some(ask);
-                }
+                // The phrase is matched against what is in front, read fresh (a spoken command uses
+                // the active profile's labels). That read can take a second, so the front thread does
+                // it; the phrase waits in line with the presses, so their order is kept.
+                let _ = front.send(FrontAsk::Press { read: true });
+                asked.push_back(Need::Heard(heard));
             }
         }
         // The polish server is stopped after 10 idle minutes (frees ~1.2 GB) and started at the next press.
@@ -706,6 +692,19 @@ fn run_loop<T: PadTransport + 'static>(
                         context.labels_on_screen = true;
                         arbiter.set_context(context);
                         shared.emit(EngineEvent::ShowLabels { profile, labels, millis: duration.as_millis() as u64 });
+                    }
+                }
+                Need::Heard(heard) => {
+                    let Some(voice) = voice.as_ref() else { continue };
+                    let spoken = SpokenContext { shared, settings: &settings, verified, jobs, watch_token };
+                    let installed = |name: &str| voice.app_installed(name);
+                    let front = info.as_ref().map(|i| ForegroundContext::from(i).app_name).unwrap_or_default();
+                    let mut snapshot = FrontSnapshot(info);
+                    if let Some(ask) = handle_heard(&spoken, &mut snapshot, voice.running_apps(), &installed, heard, now) {
+                        context.confirmation_pending = true;
+                        arbiter.set_context(context);
+                        shared.emit(EngineEvent::Confirm { summary: ask.summary.clone(), close: close_target(&ask.action, &front) });
+                        pending = Some(ask);
                     }
                 }
             }

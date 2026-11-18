@@ -122,6 +122,14 @@ pub fn route(transcript: &str, lexicon: &[LexiconEntry], settings: &RouterSettin
         let why = r.message.clone().unwrap_or_default();
         return RouteResult::failed(transcript, format!("Part {} \"{}\" did not match, so nothing ran. {why}", i + 1, parts[i]));
     }
+    // Reminders and Spotify are run by the engine as a whole action, never as a step, so a plan
+    // holding one would fail halfway: refuse it up front instead.
+    let alone = |r: &RouteResult| r.action.as_ref().is_some_and(|a| {
+        matches!(a.kind(), ActionKind::Reminder | ActionKind::CancelReminders) || ActionKind::is_spotify_text(&a.kind)
+    });
+    if let Some(i) = results.iter().position(alone) {
+        return RouteResult::failed(transcript, format!("Part {} \"{}\" has to be said on its own, so nothing ran.", i + 1, parts[i]));
+    }
     let mut steps = Vec::new();
     for r in &results {
         if !steps.is_empty() {
@@ -549,6 +557,10 @@ mod tests {
         let lock = route("open chrome then lock screen", &[], &s);
         let a = lock.action.expect("compound");
         assert!(super::super::safety::evaluate(&super::super::safety::steps_of(&a)).requires_confirmation);
+        // Spotify (and reminders) run only as a whole action, never as a step: refused, and named.
+        let spotify = route("play lo-fi on spotify then open chrome", &[], &s);
+        assert!(!spotify.success && spotify.action.is_none(), "{spotify:?}");
+        assert!(spotify.message.unwrap().contains("on its own"));
         // "then" inside a search stays a search.
         let q = route("search for what happened then", &[], &s);
         assert_eq!(q.action, Some(action("OpenUrl", "https://www.google.com/search?q=what+happened+then")));

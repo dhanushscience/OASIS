@@ -1,5 +1,5 @@
-//! The YouTube and browser-bridge settings, and the rule for when the hidden YouTube gestures
-//! (hold for 2×, double-click for volume) are live. Port of `EvaluateYouTubeWatchPlayingGestures`
+//! The YouTube and browser-bridge settings, and the rule for when the hidden YouTube gesture (hold
+//! for 2×) is live. Double-click for volume is switched off (see `arbiter_bridge.rs`). Port of `EvaluateYouTubeWatchPlayingGestures`
 //! and `LooksLikeYouTubeWatchPage` from `Services/OverlayService.cs`, and the settings message of
 //! `BrowserBridgeService.BroadcastYouTubeSettingsAsync`.
 
@@ -51,8 +51,10 @@ pub fn extension_settings(settings: &Settings) -> Value {
         "autoSkipAds": flag(yt, "AutoSkipAds", true),
         "gesturesEnabled": gestures_enabled(settings),
         "hold2xButtonIndex": index(yt, "Hold2xButtonIndex", 1),
-        "volumeUpButtonIndex": index(yt, "VolumeUpButtonIndex", 0),
-        "volumeDownButtonIndex": index(yt, "VolumeDownButtonIndex", 2),
+        // Double-click for volume is off: -1 is "no button", so an older extension that still
+        // reads these does nothing either.
+        "volumeUpButtonIndex": -1,
+        "volumeDownButtonIndex": -1,
     })
 }
 
@@ -137,7 +139,7 @@ mod tests {
         assert_eq!(bridge_port(&s), 17322);
         let sent = extension_settings(&s);
         assert_eq!(sent["autoSkipAds"], true);
-        assert_eq!((sent["hold2xButtonIndex"].as_i64(), sent["volumeUpButtonIndex"].as_i64(), sent["volumeDownButtonIndex"].as_i64()), (Some(1), Some(0), Some(2)));
+        assert_eq!((sent["hold2xButtonIndex"].as_i64(), sent["volumeUpButtonIndex"].as_i64(), sent["volumeDownButtonIndex"].as_i64()), (Some(1), Some(-1), Some(-1)));
     }
 
     #[test]
@@ -149,8 +151,7 @@ mod tests {
         }));
         let sent = extension_settings(&s);
         assert_eq!(sent["hold2xButtonIndex"], 2);
-        assert_eq!(sent["volumeUpButtonIndex"], 1);
-        assert_eq!(sent["volumeDownButtonIndex"], 0);
+        assert_eq!((sent["volumeUpButtonIndex"].as_i64(), sent["volumeDownButtonIndex"].as_i64()), (Some(-1), Some(-1)), "volume is off even when set");
     }
 
     #[test]

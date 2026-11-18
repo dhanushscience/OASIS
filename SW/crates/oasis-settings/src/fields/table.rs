@@ -104,7 +104,7 @@ pub(super) fn specs(ctx: &FieldContext, settings: &Settings) -> Vec<Spec> {
             id: "youtube.gestures",
             section: "youtube",
             label: "Hidden gestures",
-            hint: "Hold a button for 2x speed, double-click a button for volume, while a video plays.",
+            hint: "Hold a button for 2x speed while a video plays.",
             place: Place::In("YouTube", "GesturesEnabled"),
             default: json!(true),
             kind: Kind::Toggle,

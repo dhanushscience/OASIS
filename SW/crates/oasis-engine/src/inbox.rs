@@ -10,7 +10,6 @@
 //! post what they read.
 
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
-use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant as StdInstant};
 
@@ -18,7 +17,7 @@ use oasis_core::bridge::YouTubeWatchEvent;
 use oasis_core::matching::ForegroundContext;
 use oasis_core::Instant;
 use oasis_platform::pad_connector::{ConnectorEvent, PadConnector};
-use oasis_platform::ports::{ForegroundInfo, PadTransport, PlatformResult};
+use oasis_platform::ports::{ForegroundInfo, PadTransport, PlatformError, PlatformResult};
 use oasis_settings::Settings;
 
 use crate::engine::{dictation_style, ForegroundProbe};
@@ -98,7 +97,7 @@ const FRONT_WATCH_EVERY: Duration = Duration::from_millis(100);
 
 /// Owns the reads of what is in front. Posts `Front` when it changed, and answers each ask.
 pub(crate) fn spawn_front(
-    probe: SharedProbe,
+    probe: Box<dyn ForegroundProbe>,
     editable_focus: Box<dyn Fn() -> bool + Send>,
     asks: Receiver<FrontAsk>,
     inbox: Sender<Input>,
@@ -127,7 +126,7 @@ pub(crate) fn spawn_front(
                     }
                     Ok(FrontAsk::Capture(settings)) => {
                         let info = probe.current().ok();
-                        crate::polish::set_front_style(dictation_style(&mut probe));
+                        crate::polish::set_front_style(dictation_style(probe.as_mut()));
                         let process = info.as_ref().map(|i| ForegroundContext::from(i).app_name).unwrap_or_default();
                         let asked = StdInstant::now();
                         let dictate = crate::voice::wants_dictation(&settings, &process, editable_focus.as_ref());
@@ -149,28 +148,13 @@ pub(crate) fn spawn_front(
         .expect("a thread can be spawned")
 }
 
-/// The one foreground probe, shared by the front thread and the spoken-command handling on the
-/// loop. Each call holds it only for that read.
-#[derive(Clone)]
-pub(crate) struct SharedProbe(pub(crate) Arc<Mutex<Box<dyn ForegroundProbe>>>);
+/// What the front thread read for a spoken phrase, handed to the phrase handling on the loop, so the
+/// loop never reads (or waits on) UI Automation itself.
+pub(crate) struct FrontSnapshot(pub(crate) Option<ForegroundInfo>);
 
-impl SharedProbe {
-    fn lock(&self) -> MutexGuard<'_, Box<dyn ForegroundProbe>> {
-        self.0.lock().unwrap_or_else(|e| e.into_inner())
-    }
-}
-
-impl ForegroundProbe for SharedProbe {
-    fn set_url_profiles_exist(&mut self, exist: bool) {
-        self.lock().set_url_profiles_exist(exist);
-    }
-    fn set_panel_profiles_exist(&mut self, exist: bool) {
-        self.lock().set_panel_profiles_exist(exist);
-    }
+impl ForegroundProbe for FrontSnapshot {
+    fn set_url_profiles_exist(&mut self, _exist: bool) {}
     fn current(&mut self) -> PlatformResult<ForegroundInfo> {
-        self.lock().current()
-    }
-    fn current_for_press(&mut self) -> PlatformResult<ForegroundInfo> {
-        self.lock().current_for_press()
+        self.0.clone().ok_or_else(|| PlatformError::Unavailable("The app in front could not be read.".into()))
     }
 }

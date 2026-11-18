@@ -81,7 +81,9 @@ fn update(field: &mut String, value: &str) -> bool {
 impl YouTubeWatchState {
     /// Apply one event. Returns `true` when anything observable changed.
     pub fn apply(&mut self, evt: &YouTubeWatchEvent) -> bool {
-        let ty = evt.event_type.trim();
+        // Event names are read the same way everywhere: spaces trimmed, case ignored.
+        let ty = evt.event_type.trim().to_ascii_lowercase();
+        let ty = ty.as_str();
         if ty.is_empty() {
             return false;
         }
@@ -190,7 +192,7 @@ impl YouTubeWatchState {
 /// The words for the notice shown when a video ends: its title, cut to 48 characters. `None` for
 /// anything but the end of a video that is not a Short (Shorts loop constantly).
 pub fn ended_notice(evt: &YouTubeWatchEvent) -> Option<String> {
-    if evt.event_type != "youtube.ended" || is_short_surface(evt) {
+    if !evt.event_type.trim().eq_ignore_ascii_case("youtube.ended") || is_short_surface(evt) {
         return None;
     }
     let title = trimmed(&evt.title);
@@ -243,6 +245,14 @@ mod tests {
         ended.url = Some("https://www.youtube.com/shorts/abc".into());
         assert_eq!(ended_notice(&ended), None);
         assert_eq!(ended_notice(&YouTubeWatchEvent::new("youtube.progress")), None);
+    }
+
+    #[test]
+    fn event_names_are_read_alike_everywhere_whatever_their_case_or_spaces() {
+        assert!(ended_notice(&YouTubeWatchEvent::new(" YouTube.Ended ")).is_some());
+        let mut s = YouTubeWatchState::default();
+        assert!(s.apply(&YouTubeWatchEvent::new(" YouTube.Started ")));
+        assert_eq!(s.current_when_token(), ConfigWhen::PLAYING);
     }
 
     #[test]

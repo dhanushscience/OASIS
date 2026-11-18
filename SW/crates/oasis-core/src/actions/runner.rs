@@ -202,8 +202,10 @@ fn is_brightness(value: &str) -> bool {
     (1..=3).contains(&digits.len()) && digits.bytes().all(|b| b.is_ascii_digit()) && digits.parse::<u32>().is_ok_and(|n| n <= 100)
 }
 
-/// `"chrome|https://example.com"` opens that page in that browser; anything else is handed to
-/// the backend as an app to focus or start.
+/// `"chrome|https://example.com"` opens that page in that browser, or in the default browser when
+/// that one cannot be started (the whole text is never looked up as an app name: the fuzzy app
+/// finder could start something unrelated). Anything else is handed to the backend as an app to
+/// focus or start.
 fn launch_app(backend: &mut dyn ActionBackend, value: &str) -> bool {
     let query = value.trim();
     if let Some(pipe) = query.find('|').filter(|&p| p > 0) {
@@ -211,9 +213,7 @@ fn launch_app(backend: &mut dyn ActionBackend, value: &str) -> bool {
         if !browser.is_empty() && !url.is_empty() {
             match try_allow(url, UrlScope::Automation) {
                 Some(allowed) => {
-                    if backend.launch_browser_url(browser, &allowed) {
-                        return true;
-                    }
+                    return backend.launch_browser_url(browser, &allowed) || backend.open_url(&allowed);
                 }
                 None => {
                     backend.security_log(&format!("Blocked browser URL launch: {url}"));
@@ -349,10 +349,10 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_browser_falls_back_to_launching_the_whole_text() {
+    fn an_unknown_browser_opens_the_page_in_the_default_one() {
         let mut b = Fake { fail: vec!["browser"], ..Fake::default() };
         assert!(run_single(&mut b, "LaunchApp", "weirdbrowser|x.com"));
-        assert_eq!(b.calls, ["browser:weirdbrowser|https://x.com", "app:weirdbrowser|x.com"]);
+        assert_eq!(b.calls, ["browser:weirdbrowser|https://x.com", "url:https://x.com"]);
     }
 
     #[test]
