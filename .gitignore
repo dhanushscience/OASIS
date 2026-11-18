@@ -19,3 +19,6 @@ build/
 
 # Cleanup-model fine-tuning experiments (private until it works)
 /finetune/
+
+# Marketing video assets (screenshots, brand kit, prompt)
+/release-video/
