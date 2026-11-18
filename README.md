@@ -9,15 +9,15 @@
 
 A small pad with three buttons, and a free Windows app that turns them into whatever the app in front of you needs.
 
-[![Download](https://img.shields.io/badge/Download-Windows%2010%20%7C%2011-E8500F?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhanushscience/OASIS-releases/releases/latest/download/OASIS-setup.exe)
+[![Download](https://img.shields.io/badge/Download-Windows%2010%20%7C%2011-E8500F?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/dhanushscience/OASIS/releases/latest/download/OASIS-setup.exe)
 
-[![Release](https://img.shields.io/github/v/release/dhanushscience/OASIS-releases?label=release&color=E8500F)](https://github.com/dhanushscience/OASIS-releases/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/dhanushscience/OASIS-releases/total?color=1E9A52)](https://github.com/dhanushscience/OASIS-releases/releases)
+[![Release](https://img.shields.io/github/v/release/dhanushscience/OASIS?label=release&color=E8500F)](https://github.com/dhanushscience/OASIS/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/dhanushscience/OASIS/total?color=1E9A52)](https://github.com/dhanushscience/OASIS/releases)
 [![Licence](https://img.shields.io/badge/licence-Apache--2.0-blue)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-stable-B7410E?logo=rust)](SW/)
 [![Status](https://img.shields.io/badge/status-public%20beta-E8500F)](#status)
 
-[Website](https://dhanushscience.github.io/PROJECT-OASIS/) · [Install guide](beta/INSTALL.md) · [User guide](beta/USING.md) · [Report a bug](beta/FEEDBACK.md) · [Changelog](CHANGELOG.md)
+[Website](https://dhanushscience.github.io/OASIS/) · [Install guide](beta/INSTALL.md) · [User guide](beta/USING.md) · [Report a bug](beta/FEEDBACK.md) · [Changelog](CHANGELOG.md)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/oasis-dark.png">
@@ -67,7 +67,7 @@ Hold a button, say it, let go. The same key types or acts, depending on what you
 
 ## Get it
 
-1. **[Download the installer](https://github.com/dhanushscience/OASIS-releases/releases/latest/download/OASIS-setup.exe)** (about 11 MB).
+1. **[Download the installer](https://github.com/dhanushscience/OASIS/releases/latest/download/OASIS-setup.exe)** (about 11 MB).
 2. Run it. Windows 10 or 11, 64-bit. A guide (Mr. Science) walks you through the first minutes.
 3. Hold a button and talk.
 
@@ -99,7 +99,7 @@ The brain, `oasis-core`, has no operating-system code in it, so it is tested wit
 | Browser extension (off in this beta) | [`SW/extensions/`](SW/extensions) |
 | Tester guides and release notes | [`beta/`](beta) |
 | Website | [`webpage` branch](../../tree/webpage) |
-| Installers and update feed | [OASIS-releases](https://github.com/dhanushscience/OASIS-releases/releases) |
+| Installers and update feed | [Releases](https://github.com/dhanushscience/OASIS/releases) |
 
 ### Build from source
 

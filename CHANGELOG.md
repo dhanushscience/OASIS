@@ -2,6 +2,11 @@
 
 All notable changes to OASIS. The format follows [Keep a Changelog](https://keepachangelog.com). Full notes: [beta/RELEASE-NOTES.md](beta/RELEASE-NOTES.md).
 
+## [0.1.7]
+
+### Changed
+- Updates and voice models now come from one place, github.com/dhanushscience/OASIS. Nothing to do on your side: your models stay where they are.
+
 ## [0.1.6]
 
 ### Changed

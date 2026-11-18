@@ -109,7 +109,7 @@ To start completely fresh, delete the whole `%APPDATA%\ProjectOASIS` folder, but
 
 ## 4. Install the new version
 
-1. Open <https://github.com/dhanushscience/OASIS-releases/releases/latest>.
+1. Open <https://github.com/dhanushscience/OASIS/releases/latest>.
 2. Download `OASIS_<version>_x64-setup.exe` and double-click it. Follow [Install OASIS](INSTALL.md)
    (Windows may say **Windows protected your PC**: click **More info**, then **Run anyway**).
 3. When it asks about starting with Windows, answer **Yes** if you want it. If it says another copy of OASIS is

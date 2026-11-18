@@ -1,5 +1,14 @@
 # What's new
 
+## 0.1.7
+
+- OASIS now updates and downloads its voice models from one place, github.com/dhanushscience/OASIS. Nothing to do on your side: your models stay where they are.
+
+## 0.1.6
+
+- Voice commands understand spoken numbers, and a failed command is never typed.
+- Administrator mode now requires OASIS to be installed under Program Files.
+
 ## 0.1.5
 
 **Public beta**

@@ -12,7 +12,7 @@ param(
     [string]$Notes = "",
     [switch]$Publish,
     # The public repo installed copies read latest.json from; must match the endpoint in tauri.conf.json.
-    [string]$ReleaseRepo = "dhanushscience/OASIS-releases",
+    [string]$ReleaseRepo = "dhanushscience/OASIS",
     [string]$SigningKey = (Join-Path $env:USERPROFILE ".tauri\oasis-updater.key")
 )
 $ErrorActionPreference = "Stop"
