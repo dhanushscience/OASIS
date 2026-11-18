@@ -46,4 +46,6 @@ pub mod uia;
 #[cfg(windows)]
 pub mod uia_panel;
 #[cfg(windows)]
+pub mod watch;
+#[cfg(windows)]
 pub mod window;

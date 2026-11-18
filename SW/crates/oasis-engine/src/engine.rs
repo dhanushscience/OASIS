@@ -460,7 +460,10 @@ impl Drop for EngineHandle {
 const VOICE_TICK: Duration = Duration::from_millis(10);
 
 /// How often the loop looks for an outside edit of `profiles.json`.
+/// Used only when the folder watcher could not start.
 const DISK_CHECK_EVERY: Duration = Duration::from_millis(1500);
+/// With the watcher running, a look now and then in case Windows missed a change (a network drive).
+const DISK_SAFETY_NET: Duration = Duration::from_secs(30);
 
 // ---- start -----------------------------------------------------------------------------------
 
@@ -707,8 +710,30 @@ fn run_loop<T: PadTransport + 'static>(
     let mut watch = YouTubeWatchState::default();
     let mut last_near_end = String::new();
 
-    // profiles.json is checked for outside edits (the C# app, a text editor) a couple of times a second.
-    let mut next_disk_check = StdInstant::now() + DISK_CHECK_EVERY;
+    // profiles.json is checked for outside edits (the C# app, a text editor) when Windows reports a
+    // write in its folder. Without the watcher the check falls back to a couple of times a second.
+    #[cfg(windows)]
+    let settings_watch = {
+        let inbox = shared.inbox.clone();
+        let file = shared.paths.profiles();
+        let started = match file.parent() {
+            Some(dir) => oasis_win::watch::FolderWatch::start(dir, move || {
+                let _ = inbox.send(Input::SettingsFileChanged);
+            })
+            .map_err(|e| e.to_string()),
+            None => Err("no folder".to_string()),
+        };
+        started
+            .map_err(|why| {
+                SecurityLog::at(shared.paths.security_log())
+                    .write(&format!("The settings folder cannot be watched ({why}), so profiles.json is checked every 1.5 seconds."));
+            })
+            .ok()
+    };
+    #[cfg(not(windows))]
+    let settings_watch: Option<()> = None;
+    let disk_every = if settings_watch.is_some() { DISK_SAFETY_NET } else { DISK_CHECK_EVERY };
+    let mut next_disk_check = StdInstant::now() + disk_every;
     let mut last_tried = None;
     let mut next_reminder_check = StdInstant::now();
     let mut last_front: Option<ForegroundInfo> = None;
@@ -786,7 +811,7 @@ fn run_loop<T: PadTransport + 'static>(
             fire_due_reminders(shared, jobs);
         }
         if StdInstant::now() >= next_disk_check {
-            next_disk_check = StdInstant::now() + DISK_CHECK_EVERY;
+            next_disk_check = StdInstant::now() + disk_every;
             let changed = shared.store().changed_on_disk();
             if changed.is_some() && changed != last_tried {
                 last_tried = changed;
@@ -848,6 +873,8 @@ fn run_loop<T: PadTransport + 'static>(
         for input in inputs {
             match input {
                 Input::Wake => {}
+                // OASIS's own saves land here too: `changed_on_disk` knows them and says nothing.
+                Input::SettingsFileChanged => next_disk_check = StdInstant::now(),
                 Input::Pad(event) => connector_events.push(event),
                 Input::Front(info) => {
                     // Remember the last app that was not OASIS: the window offers to make it a profile.
@@ -1215,7 +1242,7 @@ fn run_loop<T: PadTransport + 'static>(
     }
     crate::polish::stop();
     // Ends the pad and front threads (each finishes the read it is in).
-    drop((power, front, inbox));
+    drop((power, front, inbox, settings_watch));
     let _ = pad_thread.join();
     let _ = front_thread.join();
 }

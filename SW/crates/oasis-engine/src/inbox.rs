@@ -27,6 +27,8 @@ use crate::engine::{dictation_style, ForegroundProbe};
 pub(crate) enum Input {
     /// Look again: keyboard buttons are waiting, the settings changed, or it is time to stop.
     Wake,
+    /// Something was written in the settings folder: check `profiles.json` now.
+    SettingsFileChanged,
     Pad(ConnectorEvent),
     YouTube(YouTubeWatchEvent),
     /// The app in front, when it changed.
