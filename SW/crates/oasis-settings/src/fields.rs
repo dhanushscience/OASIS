@@ -203,24 +203,6 @@ fn specs(ctx: &FieldContext, settings: &Settings) -> Vec<Spec> {
             kind: Kind::Choice(buttons(true)),
         },
         Spec {
-            id: "youtube.volume_up_button",
-            section: "youtube",
-            label: "Double-click for volume up",
-            hint: "The button to double-click.",
-            place: Place::In("YouTube", "VolumeUpButtonIndex"),
-            default: json!(0),
-            kind: Kind::Choice(buttons(true)),
-        },
-        Spec {
-            id: "youtube.volume_down_button",
-            section: "youtube",
-            label: "Double-click for volume down",
-            hint: "The button to double-click.",
-            place: Place::In("YouTube", "VolumeDownButtonIndex"),
-            default: json!(2),
-            kind: Kind::Choice(buttons(true)),
-        },
-        Spec {
             id: "pad.sounds",
             section: "pad",
             label: "Sound",
@@ -879,14 +861,8 @@ pub fn warnings(settings: &Settings) -> Vec<String> {
         let spec = specs.iter().find(|s| s.id == id)?;
         current(settings, spec).as_i64().filter(|i| *i >= 0)
     };
-    let (hold, up, down) = (value("youtube.hold2x_button"), value("youtube.volume_up_button"), value("youtube.volume_down_button"));
+    let hold = value("youtube.hold2x_button");
     let mut notes = Vec::new();
-    if hold.is_some() && (hold == up || hold == down) {
-        notes.push("The 2x-speed button is also a volume button: a hold may be taken as a double-click.".to_string());
-    }
-    if up.is_some() && up == down {
-        notes.push("Volume up and volume down are the same button.".to_string());
-    }
     if let (Some(desktop), Some(hold)) = (value("pad.show_desktop_button"), hold) {
         if desktop == hold {
             notes.push("The show-desktop button is also the 2x-speed button: in a video it holds for 2x, elsewhere it shows the desktop.".to_string());
@@ -1131,7 +1107,7 @@ my name = Dhanush"));
     fn clashing_buttons_get_a_note_but_are_allowed() {
         let mut s = real_like();
         assert!(warnings(&s).iter().any(|w| w.contains("show-desktop")), "your layout shares button 3: {:?}", warnings(&s));
-        set(&mut s, "youtube.volume_down_button", json!(2)).unwrap();
-        assert!(warnings(&s).iter().any(|w| w.contains("also a volume button")));
+        set(&mut s, "youtube.hold2x_button", json!(0)).unwrap();
+        assert!(warnings(&s).is_empty(), "no clash once they differ: {:?}", warnings(&s));
     }
 }

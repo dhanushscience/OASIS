@@ -1061,16 +1061,16 @@ fn holding_that_button_anywhere_else_does_nothing_to_the_extension() {
 }
 
 #[test]
-fn a_double_click_on_a_volume_button_while_a_video_plays_changes_the_volume() {
+fn on_a_playing_video_two_taps_run_the_button_twice_and_never_change_the_volume() {
+    // Double-click for volume is switched off (2026-11-18): each tap is the button's own action.
     let (h, mut socket) = start_with_extension("yt-volume");
     h.focus("chrome", "T - YouTube - Google Chrome", WATCH_URL);
     video_playing(&h, &mut socket);
 
     h.pad.tap(0);
     h.pad.tap(0);
-    let actions = h.expect_actions(1);
-    assert_eq!(actions.len(), 1, "one volume step, not two key presses: {actions:?}");
-    assert!(actions[0].contains("VolumeUp"), "{actions:?}");
+    let actions = h.expect_actions(2);
+    assert_eq!(actions, ["shortcut [Char('K')]", "shortcut [Char('K')]"], "{actions:?}");
 }
 
 #[test]

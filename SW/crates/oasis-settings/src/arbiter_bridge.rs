@@ -39,8 +39,11 @@ pub fn arbiter_config(settings: &Settings, voice_model_present: bool) -> Arbiter
         hold2x_threshold: millis(int(yt, "Hold2xThresholdMs", 250)),
         push_to_talk_hold: millis(int(voice, "PushToTalkHoldMs", 350)),
         ai_hold_duration: millis(ai_hold),
-        volume_up: optional_button(int(yt, "VolumeUpButtonIndex", 0)),
-        volume_down: optional_button(int(yt, "VolumeDownButtonIndex", 2)),
+        // Double-click for volume on YouTube is switched off (owner, 2026-11-18): a single tap on
+        // those buttons waited for a second tap and, with labels hidden for the profile, was lost.
+        // The stored `VolumeUpButtonIndex` / `VolumeDownButtonIndex` are kept but not used.
+        volume_up: None,
+        volume_down: None,
         hold2x: optional_button(int(yt, "Hold2xButtonIndex", 1)),
         push_to_talk_mask: mask(&push_to_talk),
         voice_enabled,
@@ -102,8 +105,7 @@ mod tests {
         let config = arbiter_config(&Settings::default(), true);
         let defaults = ArbiterConfig::product_defaults();
         assert_eq!(config.hold2x, defaults.hold2x);
-        assert_eq!(config.volume_up, defaults.volume_up);
-        assert_eq!(config.volume_down, defaults.volume_down);
+        assert_eq!((config.volume_up, config.volume_down), (None, None), "double-click volume is off");
         assert_eq!(config.show_desktop, defaults.show_desktop);
         assert_eq!(config.show_desktop_hold, defaults.show_desktop_hold);
         assert_eq!(config.double_click_window, defaults.double_click_window);
@@ -122,8 +124,7 @@ mod tests {
         }));
         let c = arbiter_config(&s, true);
         assert_eq!(c.hold2x, Some(ButtonId::THREE));
-        assert_eq!(c.volume_up, Some(ButtonId::TWO));
-        assert_eq!(c.volume_down, Some(ButtonId::ONE));
+        assert_eq!((c.volume_up, c.volume_down), (None, None), "double-click volume is off even when set");
         assert_eq!(c.show_desktop_hold, Duration::from_millis(1000));
         assert!(c.voice_enabled);
         assert_eq!(c.push_to_talk_mask, ButtonMask::ONE);
