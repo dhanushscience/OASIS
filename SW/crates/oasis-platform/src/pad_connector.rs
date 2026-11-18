@@ -73,7 +73,6 @@ pub struct PadConnector<T: PadTransport> {
     next_scan_at: Option<Instant>,
     next_ping_at: Option<Instant>,
     pings_enabled: bool,
-    scan_time: Duration,
 }
 
 impl<T: PadTransport> PadConnector<T> {
@@ -86,14 +85,7 @@ impl<T: PadTransport> PadConnector<T> {
             next_scan_at: None,
             next_ping_at: None,
             pings_enabled: false,
-            scan_time: SCAN_TIME,
         }
-    }
-
-    /// How long one look for the pad lasts. The engine loop does nothing else meanwhile, so it is
-    /// shortened while other inputs (the keyboard) are on and must answer quickly.
-    pub fn set_scan_time(&mut self, time: Option<Duration>) {
-        self.scan_time = time.unwrap_or(SCAN_TIME);
     }
 
     /// Let go of the pad and stop looking for it (the person turned the pad off). The events say so.
@@ -186,7 +178,7 @@ impl<T: PadTransport> PadConnector<T> {
         }
         self.next_scan_at = None;
 
-        let pads = match self.transport.scan(self.scan_time) {
+        let pads = match self.transport.scan(SCAN_TIME) {
             Ok(pads) => pads,
             Err(e) => {
                 events.push(ConnectorEvent::Status(PadStatus::Unavailable));

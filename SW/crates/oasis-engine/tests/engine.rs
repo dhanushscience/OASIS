@@ -16,7 +16,7 @@ use oasis_engine::{
     ForegroundProbe,
 };
 use oasis_platform::paths::OasisPaths;
-use oasis_platform::ports::{ButtonSource, ForegroundInfo, PadInfo, PadTransport, PlatformResult};
+use oasis_platform::ports::{ButtonSource, ForegroundInfo, PadInfo, PadTransport, PlatformResult, Wake};
 use oasis_platform::profile_store::SettingsIntegrity;
 
 const PROFILES: &str = r#"{
@@ -203,9 +203,23 @@ type Asked = (bool, [String; 3], bool);
 struct FakeButtons {
     queue: Arc<Mutex<Vec<(u8, bool)>>>,
     asked: Arc<Mutex<Option<Asked>>>,
+    wake: Arc<Mutex<Option<Wake>>>,
+}
+
+impl FakeButtons {
+    /// Edges as the keyboard would hand them over, waking the engine as a real source does.
+    fn press(&self, edges: impl IntoIterator<Item = (u8, bool)>) {
+        self.queue.lock().unwrap().extend(edges);
+        if let Some(wake) = self.wake.lock().unwrap().clone() {
+            wake();
+        }
+    }
 }
 
 impl ButtonSource for FakeButtons {
+    fn set_wake(&mut self, wake: Wake) {
+        *self.wake.lock().unwrap() = Some(wake);
+    }
     fn configure(&mut self, listen: bool, chords: [String; 3], exclusive: bool) {
         *self.asked.lock().unwrap() = Some((listen, chords, exclusive));
     }
@@ -342,9 +356,18 @@ impl Harness {
         self.foreground.0.lock().unwrap().3 = panel.into();
     }
 
+    /// Puts an app in front and waits until the engine has seen it (it looks every 100 ms; a press
+    /// reads it afresh anyway, the YouTube gestures use what was seen). OASIS's own window is never
+    /// shown as the app in front, so for it there is nothing to wait for.
     fn focus(&self, process: &str, title: &str, url: &str) {
         let panel = self.foreground.0.lock().unwrap().3.clone();
         *self.foreground.0.lock().unwrap() = (process.into(), title.into(), url.into(), panel);
+        if process != "<oasis>" {
+            self.wait(
+                |h| h.engine.status().front_app.is_some_and(|f| f.process == process && f.title == title),
+                "the engine to see the app in front",
+            );
+        }
     }
 
     /// Wait until `n` actions have run, then give a stray second one time to show up.
@@ -748,7 +771,7 @@ fn without_a_profiles_file_there_is_a_clear_error() {
 #[test]
 fn a_button_pressed_from_the_keyboard_runs_like_one_pressed_on_the_pad() {
     let h = Harness::start("keys-tap", true, true);
-    h.keys.queue.lock().unwrap().extend([(1, true), (1, false)]);
+    h.keys.press([(1, true), (1, false)]);
     assert_eq!(h.expect_actions(1), ["shortcut [Ctrl, Char('2')]"]);
     let press = &h.presses()[0];
     assert_eq!((press.button, press.profile.as_str()), (2, "Default"));
@@ -758,7 +781,7 @@ fn a_button_pressed_from_the_keyboard_runs_like_one_pressed_on_the_pad() {
 fn a_keyboard_button_runs_its_action_even_on_the_oasis_window() {
     let h = Harness::start("keys-in-window", true, true);
     h.focus("<oasis>", "OASIS", "");
-    h.keys.queue.lock().unwrap().extend([(0, true), (0, false)]);
+    h.keys.press([(0, true), (0, false)]);
     assert_eq!(h.expect_actions(1), ["shortcut [Ctrl, Char('1')]"]);
 }
 
@@ -824,7 +847,7 @@ fn turning_the_pad_off_lets_go_of_it_and_the_keyboard_still_works() {
     let keyboard_only = oasis_settings::input::InputSettings { hardware: false, keyboard: true, ..Default::default() };
     h.engine.change(|s| s.set_input(&keyboard_only).map_err(oasis_settings::edit::EditError::Invalid)).unwrap();
     h.wait(|h| h.engine.status().pad == "Off" && h.engine.status().pad_name.is_none(), "the pad to be let go");
-    h.keys.queue.lock().unwrap().extend([(0, true), (0, false)]);
+    h.keys.press([(0, true), (0, false)]);
     assert_eq!(h.expect_actions(1), ["shortcut [Ctrl, Char('1')]"]);
 }
 

@@ -38,10 +38,19 @@ that way).
 - `OASIS_DATA_DIR` (see `defaults::detect_paths`) points the engine at a folder other than the real
   one, for rehearsing on a copy.
 - Actions run one at a time on a worker thread, so a long step cannot block the pad.
+- **The loop never waits on slow work.** It sleeps on one inbox until something arrives (pad,
+  keyboard, YouTube, a read of the app in front) or the next thing is due (a gesture timer, the
+  label peek, a confirmation, the timed checks, and every 10 ms while voice records). The pad
+  thread (`oasis-pad`) scans for and reads the pad; the front thread (`oasis-front`) reads what is
+  in front (UI Automation). A press asks the front thread for a fresh read and is handled when the
+  answer comes, in press order; a capture waits for "typed or a command?" with the mic already open.
+  The YouTube gestures use the front thread's last look (at most 100 ms old). Spoken commands
+  still read the app in front on the loop.
 
 | File | Contents |
 |---|---|
 | `src/engine.rs` | `start`, `EngineHandle`, `EngineParts`, `EngineConfig`, `BridgeConfig`, `ForegroundProbe`, the loop, the worker |
+| `src/inbox.rs` | What wakes the loop (`Input`), the pad thread and the front thread |
 | `src/events.rs` | `EngineEvent`, `Press`, `EngineStatus`, `FrontApp` (all `Serialize`, for the page) |
 | `src/defaults.rs` | The real Windows parts (`windows::parts()`), `detect_paths` |
 | `src/voice.rs` | Push-to-talk dictation: `VoiceMic`, `VoiceParts`, `Voice`, `Heard` |

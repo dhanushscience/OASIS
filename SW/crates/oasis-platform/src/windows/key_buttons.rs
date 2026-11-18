@@ -9,7 +9,7 @@ use oasis_core::input::{Binding, KeyMatcher, KeyVerdict};
 use oasis_core::shortcut::ChordKey;
 use oasis_win::keyboard::KeyboardHook;
 
-use crate::ports::ButtonSource;
+use crate::ports::{ButtonSource, Wake};
 
 /// The key a Windows virtual-key code stands for. The right-hand modifiers count as the left ones.
 pub fn chord_key_from_vk(vk: u32) -> Option<ChordKey> {
@@ -70,6 +70,7 @@ pub struct KeyboardButtons {
     inbox: Receiver<(u8, bool)>,
     hook: Option<KeyboardHook>,
     problem: Option<String>,
+    wake: Wake,
 }
 
 impl Default for KeyboardButtons {
@@ -87,12 +88,14 @@ impl KeyboardButtons {
             inbox,
             hook: None,
             problem: None,
+            wake: std::sync::Arc::new(|| {}),
         }
     }
 
     fn start(&mut self) {
         let shared = Arc::clone(&self.shared);
         let edges = self.edges.clone();
+        let wake = std::sync::Arc::clone(&self.wake);
         let handler = Box::new(move |vk: u32, down: bool| -> bool {
             let Some(key) = chord_key_from_vk(vk) else { return false };
             let Ok(mut state) = shared.lock() else { return false };
@@ -126,6 +129,9 @@ impl KeyboardButtons {
                     _ => {}
                 }
             }
+            if verdicts.iter().any(|v| matches!(v, KeyVerdict::Press(_) | KeyVerdict::Release(_))) {
+                wake();
+            }
             // A modifier's verdicts end in Pass, so it is never kept back; our own keys always are.
             state.exclusive && !matches!(verdicts.last(), None | Some(KeyVerdict::Pass))
         });
@@ -140,6 +146,11 @@ impl KeyboardButtons {
 }
 
 impl ButtonSource for KeyboardButtons {
+    fn set_wake(&mut self, wake: Wake) {
+        crate::ports::set_window_wake(std::sync::Arc::clone(&wake));
+        self.wake = wake;
+    }
+
     fn configure(&mut self, listen: bool, chords: [String; 3], exclusive: bool) {
         let bindings = chords.map(|text| Binding::parse(&text));
         let released = match self.shared.lock() {
@@ -152,6 +163,7 @@ impl ButtonSource for KeyboardButtons {
         for verdict in released {
             if let KeyVerdict::Release(b) = verdict {
                 let _ = self.edges.send((b, false));
+                (self.wake)();
             }
         }
         if listen && self.hook.is_none() {

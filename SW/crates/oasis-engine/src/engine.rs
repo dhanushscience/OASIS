@@ -2,13 +2,14 @@
 
 use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::collections::VecDeque;
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant as StdInstant};
 
 use oasis_app::{ArbiterHost, PadLink};
-use oasis_core::bridge::{ConfigWhen, YouTubeWatchEvent, YouTubeWatchState};
+use oasis_core::bridge::{ConfigWhen, YouTubeWatchState};
 use oasis_core::voice::command::decide::{decide, launch_target_exists, Decision, Facts};
 use oasis_core::voice::command::RouterSettings;
 use oasis_core::voice::command::safety::steps_of;
@@ -45,6 +46,7 @@ use crate::reminders::Reminders;
 use crate::use_counts::UseCounts;
 use oasis_core::voice::command::reminders::{self as phrases, LocalTime};
 use crate::events::{EngineEvent, EngineStatus, FrontApp, Press};
+use crate::inbox::{FrontAsk, Input, SharedProbe};
 use crate::voice::{Heard, Voice, VoiceContext, VoiceParts};
 
 // ---- what the engine is given ----------------------------------------------------------------
@@ -199,6 +201,8 @@ struct Shared {
     reminders: Mutex<Reminders>,
     /// Presses per profile, for ordering profiles by use.
     use_counts: Mutex<UseCounts>,
+    /// The loop's inbox: it sleeps until something arrives here or the next thing is due.
+    inbox: Sender<Input>,
 }
 
 impl Shared {
@@ -208,6 +212,11 @@ impl Shared {
 
     fn emit(&self, event: EngineEvent) {
         (self.emit)(event);
+    }
+
+    /// Have the loop look again now (new settings, keys held, stop) instead of at its next deadline.
+    fn wake(&self) {
+        let _ = self.inbox.send(Input::Wake);
     }
 
     fn settings(&self) -> MutexGuard<'_, Settings> {
@@ -237,6 +246,7 @@ impl Shared {
     /// New settings are in force: tell the loop and the status.
     fn settings_replaced(&self, profiles: usize) {
         self.generation.fetch_add(1, Ordering::SeqCst);
+        self.wake();
         self.update(|s| s.profiles_loaded = profiles);
         self.emit(EngineEvent::SettingsChanged);
     }
@@ -410,6 +420,7 @@ impl EngineHandle {
     pub fn hold_keys(&self, held: bool) {
         self.shared.keys_held.store(held, Ordering::SeqCst);
         self.shared.generation.fetch_add(1, Ordering::SeqCst);
+        self.shared.wake();
     }
 
     /// Keep a `profiles.json` that was edited outside OASIS: the signature mismatch is accepted,
@@ -420,6 +431,7 @@ impl EngineHandle {
         drop(_current);
         self.shared.set_integrity(true);
         self.shared.generation.fetch_add(1, Ordering::SeqCst);
+        self.shared.wake();
         self.shared.emit(EngineEvent::Note {
             text: "Accepted the edited profiles.json. It will be signed again the next time settings are saved."
                 .into(),
@@ -429,6 +441,7 @@ impl EngineHandle {
     /// Stop the loop and wait for it. Safe to call twice.
     pub fn stop(&mut self) {
         self.shared.stop.store(true, Ordering::SeqCst);
+        self.shared.wake();
         self.jobs = None;
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
@@ -442,9 +455,9 @@ impl Drop for EngineHandle {
     }
 }
 
-/// The engine loop's rest when nothing else holds it (no pad link to wait on): short, so a keyboard
-/// press is still judged at once.
-const LOOP_PAUSE: Duration = Duration::from_millis(4);
+/// How often the loop looks at the voice session while it records or transcribes: the loudness
+/// for the pill (every 50 ms), pieces of the recording (every 250 ms) and finished text.
+const VOICE_TICK: Duration = Duration::from_millis(10);
 
 /// How often the loop looks for an outside edit of `profiles.json`.
 const DISK_CHECK_EVERY: Duration = Duration::from_millis(1500);
@@ -461,6 +474,7 @@ where
 {
     let emit: Emit = Arc::new(on_event);
     let (store, settings, verified) = load_settings(&mut config, &emit)?;
+    let (inbox_tx, loop_inbox) = mpsc::channel::<Input>();
 
     let shared = Arc::new(Shared {
         stop: AtomicBool::new(false),
@@ -485,6 +499,7 @@ where
         use_counts: Mutex::new(UseCounts::load(config.paths.profiles().with_file_name("profile_use.json"))),
         paths: config.paths.clone(),
         emit,
+        inbox: inbox_tx,
     });
     if !verified {
         shared.emit(EngineEvent::Note {
@@ -536,6 +551,7 @@ where
                 connector,
                 foreground,
                 &jobs,
+                loop_inbox,
                 LoopExtras {
                     bridge_config,
                     voice_parts,
@@ -589,24 +605,60 @@ struct LoopExtras {
     buttons: Option<Box<dyn ButtonSource>>,
 }
 
-fn run_loop<T: PadTransport>(
+/// A press or label peek waiting for the front thread's read of what is in front.
+enum Need {
+    Tap(Gesture),
+    /// Show the labels for `duration`; `only_if_clear`: not if labels already show (the YouTube near-end peek).
+    Peek { duration: Duration, watch_token: String, only_if_clear: bool },
+}
+
+/// A capture the gesture rules began, waiting for "typed or a command?" from the front thread. Its
+/// voice requests wait with it, in order; the microphone is already open (the pre-roll).
+struct HeldCapture {
+    requests: Vec<VoiceEvent>,
+    /// The start of the press line for the timing log; the focus time is added with the answer.
+    press_line: Option<String>,
+}
+
+fn run_loop<T: PadTransport + 'static>(
     shared: &Arc<Shared>,
-    mut connector: PadConnector<T>,
-    mut foreground: Box<dyn ForegroundProbe>,
+    connector: PadConnector<T>,
+    foreground: Box<dyn ForegroundProbe>,
     jobs: &Jobs,
+    inbox: Receiver<Input>,
     extras: LoopExtras,
 ) {
-    let LoopExtras { bridge_config, voice_parts, mut startup_setup_at, buttons } = extras;
+    let LoopExtras { bridge_config, mut voice_parts, mut startup_setup_at, buttons } = extras;
     let mut seen = shared.generation.load(Ordering::SeqCst);
     let mut settings = shared.settings().clone();
     let mut verified = shared.integrity_ok.load(Ordering::SeqCst);
+    let start = StdInstant::now();
+
+    // Looking for the pad holds a thread for up to 1.5 s, so the pad has a thread of its own.
+    let (power, power_rx) = mpsc::channel::<bool>();
+    let pad_thread = crate::inbox::spawn_pad(connector, start, power_rx, shared.inbox.clone());
+    // Reading what is in front goes through UI Automation and can take a second: the front thread
+    // does it. Spoken commands still read it here, through the same probe.
+    let focus_probe = voice_parts
+        .as_mut()
+        .map(|p| std::mem::replace(&mut p.editable_focus, Box::new(|| false)))
+        .unwrap_or_else(|| Box::new(|| false));
+    let mut foreground = SharedProbe(Arc::new(Mutex::new(foreground)));
+    let (front, front_rx) = mpsc::channel::<FrontAsk>();
+    let front_thread = crate::inbox::spawn_front(foreground.clone(), focus_probe, front_rx, shared.inbox.clone());
 
     // Which ways of pressing the buttons are on: the pad, and the keyboard.
     let mut buttons = buttons;
+    if let Some(source) = buttons.as_mut() {
+        let inbox = shared.inbox.clone();
+        source.set_wake(Arc::new(move || {
+            let _ = inbox.send(Input::Wake);
+        }));
+    }
     let mut input = InputSettings::from(&settings);
     let mut hardware_was_on = true;
     let mut held = shared.keys_held.load(Ordering::SeqCst);
-    apply_input(&mut buttons, &input, &mut connector, shared);
+    apply_input(&mut buttons, &input, shared);
 
     // Push-to-talk needs voice switched on and a speech model present; the gesture rules only
     // arm it then.
@@ -623,8 +675,10 @@ fn run_loop<T: PadTransport>(
     let mut context = ArbiterContext::desktop();
     context.execution_allowed = verified;
     arbiter.set_context(context);
-    foreground.set_url_profiles_exist(has_url_based_profiles(&settings.profiles));
-    foreground.set_panel_profiles_exist(has_panel_profiles(&settings.profiles));
+    let _ = front.send(FrontAsk::Profiles {
+        url: has_url_based_profiles(&settings.profiles),
+        panel: has_panel_profiles(&settings.profiles),
+    });
 
     // When the labels now on screen go away, if any.
     let mut peek_until: Option<Instant> = None;
@@ -637,12 +691,17 @@ fn run_loop<T: PadTransport>(
     let mut getting_ready_shown = false;
     // A spoken command waiting for the pad to say yes or no.
     let mut pending: Option<Pending> = None;
+    // Presses and peeks asked of the front thread, oldest first; its answers come in this order.
+    let mut asked: VecDeque<Need> = VecDeque::new();
+    let mut capture: Option<HeldCapture> = None;
+    // What is in front, as the front thread last saw it (at most `FRONT_WATCH_EVERY` old): only for
+    // the YouTube gestures, which must be judged the moment a button goes down.
+    let mut front_now = ForegroundInfo::default();
 
     // The browser extension: what YouTube is doing decides which set of buttons a profile shows,
     // and whether the hidden YouTube gestures are live.
-    let (youtube_tx, youtube_rx) = mpsc::channel::<YouTubeWatchEvent>();
     let mut bridge: Option<(BridgeServer, u16)> = None;
-    sync_bridge(shared, bridge_config.as_ref(), &settings, &mut bridge, &youtube_tx);
+    sync_bridge(shared, bridge_config.as_ref(), &settings, &mut bridge);
     crate::polish::sync(&shared.paths.models_folder(), &settings);
     sync_preferences(&settings);
     let mut watch = YouTubeWatchState::default();
@@ -652,15 +711,45 @@ fn run_loop<T: PadTransport>(
     let mut next_disk_check = StdInstant::now() + DISK_CHECK_EVERY;
     let mut last_tried = None;
     let mut next_reminder_check = StdInstant::now();
-    let mut next_front_check = StdInstant::now();
     let mut last_front: Option<ForegroundInfo> = None;
     let mut next_meeting_check = StdInstant::now();
     let mut next_meeting_refresh = StdInstant::now();
     // The first memory line a minute after start, when the models have loaded.
     let mut next_memory_log = StdInstant::now() + Duration::from_secs(60);
 
-    let start = StdInstant::now();
+    // A deadline as a clock time, rounded up to the whole millisecond `now` is counted in, so the
+    // loop never wakes a moment early and finds nothing due.
+    let at = |time: Instant| start + Duration::from_millis(u64::try_from(time.0).unwrap_or(0).div_ceil(1_000_000));
     while !shared.stop.load(Ordering::SeqCst) {
+        // Sleep until something arrives or the next thing is due. The checks below run at least
+        // once a second, so there is always a deadline.
+        let voice_busy = voice.as_ref().is_some_and(|v| !v.is_idle());
+        let due = [
+            Some(next_meeting_check),
+            Some(next_reminder_check),
+            Some(next_disk_check),
+            Some(next_memory_log),
+            startup_setup_at,
+            arbiter.timers().next_deadline().map(at),
+            peek_until.map(at),
+            pending.as_ref().map(|ask| at(ask.until)),
+            voice_busy.then(|| StdInstant::now() + VOICE_TICK),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
+        .unwrap_or_else(StdInstant::now);
+        let mut inputs: Vec<Input> = Vec::new();
+        match inbox.recv_timeout(due.saturating_duration_since(StdInstant::now())) {
+            Ok(input) => inputs.push(input),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => break,
+        }
+        inputs.extend(inbox.try_iter());
+        if shared.stop.load(Ordering::SeqCst) {
+            break;
+        }
+
         if startup_setup_at.is_some_and(|at| StdInstant::now() >= at) {
             startup_setup_at = None;
             if verified && shared.live.load(Ordering::SeqCst) {
@@ -696,23 +785,6 @@ fn run_loop<T: PadTransport>(
             next_reminder_check = StdInstant::now() + Duration::from_secs(1);
             fire_due_reminders(shared, jobs);
         }
-        if StdInstant::now() >= next_front_check {
-            next_front_check = StdInstant::now() + FRONT_CHECK_EVERY;
-            // Remember the last app that was not OASIS: the window offers to make it a profile.
-            if let Some(info) = foreground.current().ok().filter(|i| !is_oasis(i) && !i.process.is_empty()) {
-                last_front = Some(info);
-            }
-            // Matched again against the profiles in force every time, so a profile made while OASIS
-            // is in front is the one for that app straight away.
-            if let Some(info) = &last_front {
-                let profile = matching_profile(&settings.profiles, &ForegroundContext::from(info));
-                let front = FrontApp { process: info.process.clone(), title: info.window_title.clone() };
-                shared.update(|s| {
-                    s.front_app = Some(front);
-                    s.front_profile = profile;
-                });
-            }
-        }
         if StdInstant::now() >= next_disk_check {
             next_disk_check = StdInstant::now() + DISK_CHECK_EVERY;
             let changed = shared.store().changed_on_disk();
@@ -738,7 +810,7 @@ fn run_loop<T: PadTransport>(
             if chosen != input || held_now != held {
                 input = chosen;
                 held = held_now;
-                apply_input(&mut buttons, &input, &mut connector, shared);
+                apply_input(&mut buttons, &input, shared);
             }
             verified = shared.integrity_ok.load(Ordering::SeqCst);
             voice_ready = voice.as_ref().is_some_and(|v| v.ready(&settings));
@@ -749,38 +821,66 @@ fn run_loop<T: PadTransport>(
             arbiter.set_config(arbiter_config(&settings, voice_ready));
             context.execution_allowed = verified;
             arbiter.set_context(context);
-            foreground.set_url_profiles_exist(has_url_based_profiles(&settings.profiles));
-            foreground.set_panel_profiles_exist(has_panel_profiles(&settings.profiles));
-            sync_bridge(shared, bridge_config.as_ref(), &settings, &mut bridge, &youtube_tx);
+            let _ = front.send(FrontAsk::Profiles {
+                url: has_url_based_profiles(&settings.profiles),
+                panel: has_panel_profiles(&settings.profiles),
+            });
+            // Matched again against the profiles in force, so a profile made while OASIS is in
+            // front is the one for that app straight away.
+            report_front(shared, &settings, last_front.as_ref());
+            sync_bridge(shared, bridge_config.as_ref(), &settings, &mut bridge);
             crate::polish::sync(&shared.paths.models_folder(), &settings);
             sync_preferences(&settings);
         }
+        // With the pad off the pad thread lets go of it and stops looking.
+        if input.hardware != hardware_was_on {
+            hardware_was_on = input.hardware;
+            let _ = power.send(input.hardware);
+            let status = if input.hardware { "Scanning" } else { "Off" };
+            shared.update(|s| s.pad = status.into());
+            shared.emit(EngineEvent::PadStatus { status: status.into() });
+        }
 
-        while let Ok(event) = youtube_rx.try_recv() {
-            if oasis_core::bridge::youtube_watch::near_end_peek(&event, &mut last_near_end) && peek_until.is_none() && verified {
-                if let Some((profile, labels)) = peek_labels(&settings, foreground.as_mut(), None, watch.current_when_token()) {
-                    let peek = Duration::from_secs(12);
-                    peek_until = Some(Instant::from_millis(start.elapsed().as_millis() as i64).plus(peek));
-                    context.labels_on_screen = true;
-                    arbiter.set_context(context);
-                    shared.emit(EngineEvent::ShowLabels { profile, labels, millis: peek.as_millis() as u64 });
+        let now = Instant::from_millis(start.elapsed().as_millis() as i64);
+        let mut connector_events = Vec::new();
+        let mut answers = Vec::new();
+        let mut captured = None;
+        for input in inputs {
+            match input {
+                Input::Wake => {}
+                Input::Pad(event) => connector_events.push(event),
+                Input::Front(info) => {
+                    // Remember the last app that was not OASIS: the window offers to make it a profile.
+                    if !is_oasis(&info) && !info.process.is_empty() {
+                        last_front = Some(info.clone());
+                        report_front(shared, &settings, last_front.as_ref());
+                    }
+                    front_now = info;
                 }
-            }
-            if let Some(body) = oasis_core::bridge::youtube_watch::ended_notice(&event) {
-                shared.emit(EngineEvent::Notice { title: "YouTube ended".into(), body });
-            }
-            if watch.apply(&event) {
-                let (token, title) = (watch.current_when_token().to_string(), watch.title.clone());
-                shared.update(|s| {
-                    s.youtube = token.clone();
-                    s.youtube_title = title.clone();
-                });
-                shared.emit(EngineEvent::YouTube { token, title });
+                Input::ForPress(info) => answers.push(info),
+                Input::Capture { dictate, focus_ms } => captured = Some((dictate, focus_ms)),
+                Input::YouTube(event) => {
+                    if oasis_core::bridge::youtube_watch::near_end_peek(&event, &mut last_near_end) && peek_until.is_none() && verified {
+                        let _ = front.send(FrontAsk::Press { read: labels_possible(&settings) });
+                        let watch_token = watch.current_when_token().to_string();
+                        asked.push_back(Need::Peek { duration: Duration::from_secs(12), watch_token, only_if_clear: true });
+                    }
+                    if let Some(body) = oasis_core::bridge::youtube_watch::ended_notice(&event) {
+                        shared.emit(EngineEvent::Notice { title: "YouTube ended".into(), body });
+                    }
+                    if watch.apply(&event) {
+                        let (token, title) = (watch.current_when_token().to_string(), watch.title.clone());
+                        shared.update(|s| {
+                            s.youtube = token.clone();
+                            s.youtube_title = title.clone();
+                        });
+                        shared.emit(EngineEvent::YouTube { token, title });
+                    }
+                }
             }
         }
         let watch_token = watch.current_when_token();
 
-        let now = Instant::from_millis(start.elapsed().as_millis() as i64);
         let mut effects: Vec<ArbiterEffect> = Vec::new();
 
         if peek_until.is_some_and(|until| now >= until) {
@@ -790,42 +890,12 @@ fn run_loop<T: PadTransport>(
             shared.emit(EngineEvent::HideLabels);
         }
 
-        // With the pad off the connector is not asked (it would sit scanning); sleep a little instead.
-        let mut connector_events = Vec::new();
-        if input.hardware {
-            if !hardware_was_on {
-                hardware_was_on = true;
-                shared.update(|s| s.pad = "Scanning".into());
-                shared.emit(EngineEvent::PadStatus { status: "Scanning".into() });
-            }
-            // Looking for the pad holds this loop for 0.3 to 1.5 s, so not while a keyboard press is
-            // being judged or the voice is busy: the hold, its start sound and the pill would wait.
-            let busy = !matches!(arbiter.state(), oasis_core::input::PadState::Idle) || voice.as_ref().is_some_and(|v| !v.is_idle());
-            if busy && !connector.is_connected() {
-                thread::sleep(LOOP_PAUSE);
-            } else {
-                let polled = StdInstant::now();
-                connector_events = connector.poll(now);
-                // Between scans (5 s while Bluetooth is off, after a failed connect) the poll returns at
-                // once; without a pause the loop then spun a whole CPU core.
-                if !connector.is_connected() && polled.elapsed() < LOOP_PAUSE {
-                    thread::sleep(LOOP_PAUSE);
-                }
-            }
-        } else {
-            if hardware_was_on {
-                hardware_was_on = false;
-                connector_events = connector.pause();
-                shared.update(|s| s.pad = "Off".into());
-                shared.emit(EngineEvent::PadStatus { status: "Off".into() });
-            }
-            thread::sleep(LOOP_PAUSE);
-        }
         // What went down or up this turn, from the pad and from the keyboard, judged together.
-        // (event, came from the keyboard)
         let mut pad_events: Vec<PadEvent> = Vec::new();
         for event in connector_events {
             match event {
+                // A look that was under way when the pad was switched off must not say "Connected".
+                ConnectorEvent::Status(_) | ConnectorEvent::UnavailableReason(_) if !input.hardware => {}
                 ConnectorEvent::Status(status) => {
                     shared.update(|s| s.pad = status.as_str().to_string());
                     shared.emit(EngineEvent::PadStatus { status: status.as_str().to_string() });
@@ -877,9 +947,7 @@ fn run_loop<T: PadTransport>(
                     // Hold-2× and double-click volume are live only on a playing
                     // YouTube watch page in front, so look before the press is judged.
                     let active = is_youtube_gesture_button(&settings, b.0)
-                        && foreground.current().ok().is_some_and(|info| {
-                            gestures_active(&settings, &watch, &ForegroundContext::from(&info))
-                        });
+                        && gestures_active(&settings, &watch, &ForegroundContext::from(&front_now));
                     if context.youtube_gestures_active != active {
                         context.youtube_gestures_active = active;
                         arbiter.set_context(context);
@@ -919,47 +987,37 @@ fn run_loop<T: PadTransport>(
         arbiter.fire_due(now, &mut |e| effects.push(e.clone()));
 
         // Push-to-talk: begin or end a capture as the gesture rules say. Whether this recording is
-        // typed or run as a command is decided once, now, from the program and focus in front.
+        // typed or run as a command is decided once, from the program and focus in front, on the
+        // front thread; the capture waits for that answer.
         let mut voice_requests: Vec<VoiceEvent> = Vec::new();
         let begins = effects.iter().any(|e| matches!(e, ArbiterEffect::StartVoiceCapture));
-        let begin_dictate = match (begins, voice.as_ref()) {
-            (true, Some(voice)) => {
-                // The start sound and the pill come first, so the user knows at once they can talk:
-                // the focus question below can take up to 250 ms and pausing media longer still.
-                // "listening" and "dictating" look the same; the session's own event follows.
-                if voice_ready {
-                    cue(&settings, VOICE_IN);
-                }
-                let cue_at = StdInstant::now();
-                if voice_ready && voice.is_idle() {
-                    shared.emit(EngineEvent::Voice { phase: "listening".into() });
-                }
-                let shown_at = StdInstant::now();
-                let process = foreground.current().map(|i| ForegroundContext::from(&i).app_name).unwrap_or_default();
-                crate::polish::set_front_style(dictation_style(foreground.as_mut()));
-                let asked = StdInstant::now();
-                let dictate = voice.wants_dictation(&settings, &process);
-                // One line per capture start: where the time between the press and the feedback went.
-                if let Some((down, mic_open_ms)) = talk_down.take() {
-                    let since = |at: StdInstant| at.saturating_duration_since(down).as_millis();
-                    SecurityLog::at(shared.paths.voice_timing_log()).write(&format!(
-                        "press cue_ms={} hud_ms={} mic_open_ms={mic_open_ms} focus_ms={}",
-                        since(cue_at),
-                        since(shown_at),
-                        asked.elapsed().as_millis()
-                    ));
-                }
-                dictate
+        if let (true, Some(voice)) = (begins, voice.as_ref()) {
+            // The start sound and the pill come first, so the user knows at once they can talk:
+            // the focus question can take up to 250 ms and pausing media longer still.
+            // "listening" and "dictating" look the same; the session's own event follows.
+            if voice_ready {
+                cue(&settings, VOICE_IN);
             }
-            _ => true,
-        };
+            let cue_at = StdInstant::now();
+            if voice_ready && voice.is_idle() {
+                shared.emit(EngineEvent::Voice { phase: "listening".into() });
+            }
+            let shown_at = StdInstant::now();
+            let _ = front.send(FrontAsk::Capture(Box::new(settings.clone())));
+            let press_line = talk_down.take().map(|(down, mic_open_ms)| {
+                let since = |at: StdInstant| at.saturating_duration_since(down).as_millis();
+                format!("press cue_ms={} hud_ms={} mic_open_ms={mic_open_ms}", since(cue_at), since(shown_at))
+            });
+            capture = Some(HeldCapture { requests: Vec::new(), press_line });
+        }
         effects.retain(|effect| match effect {
             ArbiterEffect::StartVoiceCapture => {
                 voice_requests.push(VoiceEvent::BeginRequested {
                     at: now,
                     enabled: voice_ready,
                     model_ready: voice_ready,
-                    dictate: begin_dictate,
+                    // Set when the front thread answers (see `HeldCapture`).
+                    dictate: true,
                 });
                 false
             }
@@ -983,16 +1041,34 @@ fn run_loop<T: PadTransport>(
                 youtube_playing,
                 log: &|line| SecurityLog::at(shared.paths.voice_timing_log()).write(line),
             };
-            for request in voice_requests {
-                voice.request(request, now, &ctx);
+            match capture.as_mut() {
+                Some(waiting) => waiting.requests.append(&mut voice_requests),
+                None => {
+                    for request in voice_requests {
+                        voice.request(request, now, &ctx);
+                    }
+                }
             }
-            // A double-click lock: tell the pill to show the tick and cross. It stays "locked" on
-            // the page until the phase goes to thinking or idle.
-            if begins && matches!(arbiter.state(), oasis_core::input::PadState::VoiceLocked) {
-                shared.emit(EngineEvent::Voice { phase: "locked".into() });
+            if let Some((dictate, focus_ms, waiting)) = captured.and_then(|(d, f)| Some((d, f, capture.take()?))) {
+                // One line per capture start: where the time between the press and the feedback went.
+                if let Some(line) = waiting.press_line {
+                    SecurityLog::at(shared.paths.voice_timing_log()).write(&format!("{line} focus_ms={focus_ms}"));
+                }
+                for mut request in waiting.requests {
+                    if let VoiceEvent::BeginRequested { dictate: typed, .. } = &mut request {
+                        *typed = dictate;
+                    }
+                    voice.request(request, now, &ctx);
+                }
+                // A double-click lock: tell the pill to show the tick and cross. It stays "locked" on
+                // the page until the phase goes to thinking or idle.
+                if matches!(arbiter.state(), oasis_core::input::PadState::VoiceLocked) {
+                    shared.emit(EngineEvent::Voice { phase: "locked".into() });
+                }
             }
-            // A button was let go without the hold becoming a capture: drop the pre-roll.
-            if std::mem::take(&mut pending_release) {
+            // A button was let go without the hold becoming a capture: drop the pre-roll. Not while a
+            // capture waits for its answer: the pre-roll is its recording.
+            if capture.is_none() && std::mem::take(&mut pending_release) {
                 voice.discard_preroll();
             }
             crate::activity::set_voice_active(!voice.is_idle());
@@ -1011,7 +1087,7 @@ fn run_loop<T: PadTransport>(
                 );
                 let text_ms = timing.released.map(|r| r.elapsed().as_millis());
                 let installed = |name: &str| voice.app_installed(name);
-                let ask = handle_heard(&spoken, foreground.as_mut(), voice.running_apps(), &installed, heard, now);
+                let ask = handle_heard(&spoken, &mut foreground, voice.running_apps(), &installed, heard, now);
                 log_voice_timing(shared, &settings, timing, dictate, words, text_ms);
                 if let Some(ask) = ask {
                     context.confirmation_pending = true;
@@ -1069,9 +1145,32 @@ fn run_loop<T: PadTransport>(
                     }
                 }
                 ArbiterEffect::DispatchCommand { button, claim } => {
+                    // A tapped button's profile is the one for what is in front at the press, read
+                    // fresh (the panel can change inside one window); the answer is handled below.
+                    let _ = front.send(FrontAsk::Press { read: claim == GestureClaimId::BoundTap });
+                    asked.push_back(Need::Tap(Gesture { button: button.0, claim, watch_token: watch_token.to_string() }));
+                }
+                ArbiterEffect::SendToDevice(command) => {
+                    if let Some((server, _)) = &bridge {
+                        server.send_command(command);
+                    }
+                }
+                ArbiterEffect::ShowPeek(duration) => {
+                    let _ = front.send(FrontAsk::Press { read: labels_possible(&settings) });
+                    asked.push_back(Need::Peek { duration, watch_token: watch_token.to_string(), only_if_clear: false });
+                }
+                _ => {}
+            }
+        }
+
+        // The front thread's reads, in the order the presses and peeks asked for them.
+        for info in answers {
+            let Some(need) = asked.pop_front() else { continue };
+            match need {
+                Need::Tap(gesture) => {
                     // First tap reveals the labels; the second one (while they show) runs.
-                    let reveal = (claim == GestureClaimId::BoundTap && peek_until.is_none() && verified)
-                        .then(|| peek_labels(&settings, foreground.as_mut(), Some(button.0), watch_token))
+                    let reveal = (gesture.claim == GestureClaimId::BoundTap && peek_until.is_none() && verified)
+                        .then(|| info.as_ref().and_then(|info| peek_labels(&settings, info, Some(gesture.button), &gesture.watch_token)))
                         .flatten();
                     if let Some((profile, labels)) = reveal {
                         let peek = Duration::from_secs(4);
@@ -1091,26 +1190,19 @@ fn run_loop<T: PadTransport>(
                         arbiter.set_context(context);
                         shared.emit(EngineEvent::HideLabels);
                     }
-                    let gesture = Gesture { button: button.0, claim, watch_token };
-                    dispatch(shared, &settings, verified, foreground.as_mut(), jobs, gesture);
+                    dispatch(shared, &settings, verified, info.as_ref(), jobs, gesture);
                 }
-                ArbiterEffect::SendToDevice(command) => {
-                    if let Some((server, _)) = &bridge {
-                        server.send_command(command);
+                Need::Peek { duration, watch_token, only_if_clear } => {
+                    if only_if_clear && (peek_until.is_some() || !verified) {
+                        continue;
                     }
-                }
-                ArbiterEffect::ShowPeek(duration) => {
-                    if let Some((profile, labels)) =
-                        peek_labels(&settings, foreground.as_mut(), None, watch_token)
-                    {
-                        let millis = duration.as_millis() as u64;
+                    if let Some((profile, labels)) = info.as_ref().and_then(|info| peek_labels(&settings, info, None, &watch_token)) {
                         peek_until = Some(now.plus(duration));
                         context.labels_on_screen = true;
                         arbiter.set_context(context);
-                        shared.emit(EngineEvent::ShowLabels { profile, labels, millis });
+                        shared.emit(EngineEvent::ShowLabels { profile, labels, millis: duration.as_millis() as u64 });
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -1122,18 +1214,27 @@ fn run_loop<T: PadTransport>(
         server.stop();
     }
     crate::polish::stop();
+    // Ends the pad and front threads (each finishes the read it is in).
+    drop((power, front, inbox));
+    let _ = pad_thread.join();
+    let _ = front_thread.join();
 }
 
-/// Take up the choice of input methods: the keyboard listener on or off, with its shortcuts, and how
-/// long one look for the pad may block the loop (short while the keyboard must answer quickly).
-fn apply_input<T: PadTransport>(
-    buttons: &mut Option<Box<dyn ButtonSource>>,
-    input: &InputSettings,
-    connector: &mut PadConnector<T>,
-    shared: &Shared,
-) {
+/// The app in front and the profile it matches, for the status (the window's "just used").
+fn report_front(shared: &Shared, settings: &Settings, front: Option<&ForegroundInfo>) {
+    let Some(info) = front else { return };
+    let profile = matching_profile(&settings.profiles, &ForegroundContext::from(info));
+    let front = FrontApp { process: info.process.clone(), title: info.window_title.clone() };
+    shared.update(|s| {
+        s.front_app = Some(front);
+        s.front_profile = profile;
+    });
+}
+
+/// Take up the choice of input methods: the keyboard listener on or off, with its shortcuts.
+fn apply_input(buttons: &mut Option<Box<dyn ButtonSource>>, input: &InputSettings, shared: &Shared) {
     // A listener that sees every key is worth a line in the security log whenever it is on or off.
-    // Held back (a guide is on screen) counts as off for the listener, the log and the scan time.
+    // Held back (a guide is on screen) counts as off for the listener and the log.
     let held = shared.keys_held.load(Ordering::SeqCst);
     let keyboard = input.keyboard && !held;
     if let Some(source) = buttons.as_mut() {
@@ -1150,7 +1251,6 @@ fn apply_input<T: PadTransport>(
             shared.emit(EngineEvent::Note { text });
         }
     }
-    connector.set_scan_time((keyboard && buttons.is_some()).then_some(Duration::from_millis(300)));
 }
 
 /// One line per recording in `voice-timing.log`: where the wait after letting go of the button went.
@@ -1327,9 +1427,6 @@ fn handle_heard(
     None
 }
 
-/// How often the app in front is looked at for the window's "just used" and "in front".
-const FRONT_CHECK_EVERY: Duration = Duration::from_millis(500);
-
 /// Whether the window in front is OASIS's own (the engine runs inside the desktop app).
 fn is_oasis(info: &ForegroundInfo) -> bool {
     info.pid == Some(std::process::id())
@@ -1436,7 +1533,7 @@ fn run_voice_action(
 /// What was heard goes to the focused app as typing, like a keyboard. In preview mode, or with a
 /// bad signature, it is shown and not typed.
 /// How the program in front wants dictation written (`docs/VOICE_DECISIONS.md` V7).
-fn dictation_style(foreground: &mut dyn ForegroundProbe) -> Style {
+pub(crate) fn dictation_style(foreground: &mut dyn ForegroundProbe) -> Style {
     foreground.current().map_or(Style::Default, |info| {
         let context = ForegroundContext::from(&info);
         oasis_core::speech::style::for_app(&context.app_name, &context.url)
@@ -1608,7 +1705,6 @@ fn sync_bridge(
     config: Option<&BridgeConfig>,
     settings: &Settings,
     current: &mut Option<(BridgeServer, u16)>,
-    youtube: &Sender<YouTubeWatchEvent>,
 ) {
     let wanted = config.filter(|_| bridge_enabled(settings));
     let port = config.and_then(|c| c.port).unwrap_or_else(|| bridge_port(settings));
@@ -1633,7 +1729,7 @@ fn sync_bridge(
     }
 
     let events = Arc::clone(shared);
-    let tx = youtube.clone();
+    let tx = shared.inbox.clone();
     let settings_source = Arc::clone(shared);
     let started = BridgeServer::start(
         port,
@@ -1642,7 +1738,7 @@ fn sync_bridge(
         move || extension_settings(&settings_source.settings()),
         move |event| match event {
             BridgeEvent::YouTube(event) => {
-                let _ = tx.send(event);
+                let _ = tx.send(Input::YouTube(event));
             }
             BridgeEvent::Status(text) => {
                 let clients = events.status.lock().map(|s| s.bridge_clients).unwrap_or(0);
@@ -1694,21 +1790,14 @@ fn is_runnable(action: &ButtonAction) -> bool {
 /// With `tapped`, the labels are only wanted if that button has something to run, as in C#.
 fn peek_labels(
     settings: &Settings,
-    foreground: &mut dyn ForegroundProbe,
+    info: &ForegroundInfo,
     tapped: Option<i32>,
     watch_token: &str,
 ) -> Option<(String, Vec<String>)> {
-    // Labels off everywhere: skip the fresh foreground read below, so the tap runs at once.
-    let can_show = settings.show_overlay_labels
-        || settings.profiles.iter().any(|p| {
-            [p.label_mode.as_str()].into_iter().chain(p.config_profiles.iter().map(|c| c.label_mode.as_str()))
-                .any(|m| LabelPolicy::effective(false, Some(m)))
-        });
-    if !can_show {
+    if !labels_possible(settings) {
         return None;
     }
-    let info = foreground.current_for_press().ok()?;
-    let context = ForegroundContext::from(&info);
+    let context = ForegroundContext::from(info);
     let active = resolve_active_profile(&settings.profiles, &context, watch_token)?;
     let profile = &settings.profiles[active.profile];
     let config = &profile.config_profiles[active.config?];
@@ -1729,25 +1818,35 @@ fn peek_labels(
     Some((profile.name.clone(), labels))
 }
 
-/// A recognised gesture and what YouTube was doing when it happened.
-struct Gesture<'a> {
-    button: i32,
-    claim: GestureClaimId,
-    watch_token: &'a str,
+/// Whether any profile can show labels. When none can, a label peek needs no read of what is in front.
+fn labels_possible(settings: &Settings) -> bool {
+    settings.show_overlay_labels
+        || settings.profiles.iter().any(|p| {
+            [p.label_mode.as_str()].into_iter().chain(p.config_profiles.iter().map(|c| c.label_mode.as_str()))
+                .any(|m| LabelPolicy::effective(false, Some(m)))
+        })
 }
 
-/// A gesture was recognised: work out what it means for the app in front and start it.
+/// A recognised gesture and what YouTube was doing when it happened.
+struct Gesture {
+    button: i32,
+    claim: GestureClaimId,
+    watch_token: String,
+}
+
+/// A gesture was recognised: work out what it means for the app in front (`info`, read at the
+/// press; `None` when it was not needed or could not be read) and start it.
 fn dispatch(
     shared: &Shared,
     settings: &Settings,
     verified: bool,
-    foreground: &mut dyn ForegroundProbe,
+    info: Option<&ForegroundInfo>,
     jobs: &Jobs,
-    gesture: Gesture<'_>,
+    gesture: Gesture,
 ) {
     let Gesture { button, claim, watch_token } = gesture;
     let number = (button + 1).clamp(0, 255) as u8;
-    let Some((press, action)) = plan(settings, foreground, button, claim, watch_token) else {
+    let Some((press, action)) = plan(settings, info, button, claim, &watch_token) else {
         shared.emit(EngineEvent::Unmapped { button: number, gesture: claim.as_str().to_string() });
         return;
     };
@@ -1770,7 +1869,7 @@ fn dispatch(
 /// The press and action for a gesture, or `None` if it is not wired.
 fn plan(
     settings: &Settings,
-    foreground: &mut dyn ForegroundProbe,
+    info: Option<&ForegroundInfo>,
     button: i32,
     claim: GestureClaimId,
     watch_token: &str,
@@ -1789,8 +1888,7 @@ fn plan(
             ButtonAction { kind: "Shortcut".into(), value: "Win+D".into(), steps: vec![] },
         )),
         GestureClaimId::BoundTap => {
-            let info = foreground.current_for_press().ok()?;
-            let context = ForegroundContext::from(&info);
+            let context = ForegroundContext::from(info?);
             let active = resolve_active_profile(&settings.profiles, &context, watch_token)?;
             let profile = &settings.profiles[active.profile];
             let config = &profile.config_profiles[active.config?];

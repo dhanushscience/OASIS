@@ -83,6 +83,11 @@ pub fn window_typing() -> u8 {
 /// Buttons pressed from the OASIS window itself: Windows does not hand the system-wide key listener the
 /// keys typed while the window is in front, so the window matches its own keys and queues the press here.
 static WINDOW_BUTTONS: std::sync::Mutex<Vec<(u8, bool)>> = std::sync::Mutex::new(Vec::new());
+/// Called after the window queues a press, so whoever drains the queue need not poll it.
+static WINDOW_WAKE: std::sync::Mutex<Option<Wake>> = std::sync::Mutex::new(None);
+
+/// Tells the owner of a [`ButtonSource`] that edges are waiting.
+pub type Wake = std::sync::Arc<dyn Fn() + Send + Sync>;
 
 /// A button (0 to 2) the window pressed or let go. Anything else is ignored.
 pub fn press_from_window(button: u8, down: bool) {
@@ -90,6 +95,16 @@ pub fn press_from_window(button: u8, down: bool) {
         if let Ok(mut queue) = WINDOW_BUTTONS.lock() {
             queue.push((button, down));
         }
+        if let Some(wake) = WINDOW_WAKE.lock().ok().and_then(|w| w.clone()) {
+            wake();
+        }
+    }
+}
+
+/// Who to wake when the window queues a press.
+pub fn set_window_wake(wake: Wake) {
+    if let Ok(mut slot) = WINDOW_WAKE.lock() {
+        *slot = Some(wake);
     }
 }
 
@@ -102,8 +117,11 @@ pub fn take_window_buttons() -> Vec<(u8, bool)> {
 ///
 /// Notifications are delivered as raw bytes; feed them to `oasis_app::PadLink`.
 /// Another way of pressing the three buttons besides the pad (the keyboard, for now). The engine tells it
-/// what to listen for and asks it, each turn, for the buttons that went down or up.
+/// what to listen for, and asks it for the buttons that went down or up whenever it calls `wake`.
 pub trait ButtonSource: Send {
+    /// Called once before `configure`: the source calls `wake` whenever new edges are waiting, so
+    /// the engine can sleep until then instead of asking all the time.
+    fn set_wake(&mut self, wake: Wake);
     /// `listen` switches it on or off. `chords` is the shortcut for each button (empty = none);
     /// `exclusive` keeps a chosen shortcut from the program in front.
     fn configure(&mut self, listen: bool, chords: [String; 3], exclusive: bool);

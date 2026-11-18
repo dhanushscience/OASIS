@@ -60,7 +60,7 @@ pub struct VoiceParts {
     /// Load the speech engine. Slow; called on the speech thread, and only when needed.
     pub load_stt: LoadStt,
     /// Whether keyboard focus is in a text field of another program (the target for dictation).
-    /// Asked once when a recording starts, so it must answer quickly.
+    /// Asked once when a recording starts, on the engine's front thread (the loop does not wait).
     pub editable_focus: Box<dyn Fn() -> bool + Send>,
     /// The programs running now, for "open <a running app>" and "switch to …".
     pub running_apps: Box<dyn Fn() -> Vec<RunningApp> + Send>,
@@ -71,6 +71,18 @@ pub struct VoiceParts {
     pub pause_media: Box<dyn Fn() -> Vec<String> + Send>,
     /// Plays again what `pause_media` paused.
     pub resume_media: Box<dyn Fn(Vec<String>) + Send>,
+}
+
+/// Whether the recording about to start should be typed (true) or run as a command (false).
+/// "Auto" types when the program in front is on the dictate-first list or a text field has
+/// the focus. `process` is the program in front. A focus probe that times out reads as "no
+/// field" (unknown); the gate in `engine.rs` then types any no-match phrase over 4 words (1.7).
+pub fn wants_dictation(settings: &Settings, process: &str, editable_focus: &dyn Fn() -> bool) -> bool {
+    match capture_mode(settings) {
+        CaptureMode::Dictate => true,
+        CaptureMode::Command => false,
+        CaptureMode::Auto => is_dictate_first(settings, process) || editable_focus(),
+    }
 }
 
 /// What was said, and whether the recording was meant to be typed.
@@ -318,18 +330,6 @@ impl Voice {
             _ => {}
         }
         self.run(VecDeque::from([event]), now, ctx, false);
-    }
-
-    /// Whether the recording about to start should be typed (true) or run as a command (false).
-    /// "Auto" types when the program in front is on the dictate-first list or a text field has
-    /// the focus. `process` is the program in front. A focus probe that times out reads as "no
-    /// field" (unknown); the gate in `engine.rs` then types any no-match phrase over 4 words (1.7).
-    pub fn wants_dictation(&self, settings: &Settings, process: &str) -> bool {
-        match capture_mode(settings) {
-            CaptureMode::Dictate => true,
-            CaptureMode::Command => false,
-            CaptureMode::Auto => is_dictate_first(settings, process) || (self.parts.editable_focus)(),
-        }
     }
 
     /// The programs running now.

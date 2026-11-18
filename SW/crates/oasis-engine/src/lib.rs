@@ -13,6 +13,7 @@
 //! |---|---|
 //! | [`events`] | `EngineEvent`, `Press`, `EngineStatus` |
 //! | [`engine`] | `start`, `EngineHandle`, the loop |
+//! | `inbox` | What wakes the loop; the pad thread and the front thread that keep slow reads off it |
 //! | [`defaults`] | The real Windows parts |
 
 pub mod activity;
@@ -21,6 +22,7 @@ pub mod engine;
 pub mod events;
 pub mod groq;
 pub mod history;
+mod inbox;
 pub mod meetings;
 pub mod polish;
 pub mod model_download;
