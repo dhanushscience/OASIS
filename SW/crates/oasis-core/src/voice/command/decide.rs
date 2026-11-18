@@ -8,7 +8,6 @@ use std::collections::HashSet;
 use crate::actions::{ActionKind, ButtonAction};
 use crate::speech::GlossaryEntry;
 
-use super::classifier::looks_like_command;
 use super::gate;
 use super::intent;
 use super::router::{find_running, RouteResult};
@@ -52,7 +51,7 @@ pub enum Decision {
     Ask { action: ButtonAction, label: String, summary: String },
     /// Nothing matched: report it, then either type it (it reads as dictation) or put it on the
     /// clipboard in case it was meant as text.
-    NoMatch { detail: String, log: String, then_type: bool, copy_to_clipboard: bool },
+    NoMatch { detail: String, log: String, copy_to_clipboard: bool },
 }
 
 /// A decision and the notes to show before it ("There is no app called …").
@@ -107,7 +106,18 @@ pub fn decide(
         return done(report("ignored", "", "A search with nothing to search for.", Some(format!("Voice ignored (empty search): \"{transcript}\""))));
     }
     let text = crate::speech::glossary::apply(&phrase.command, f.glossary).0;
-    let routed = route(&text);
+    let mut routed = route(&text);
+    // Spoken numbers ("set volume to seventy five"): tried only when the words as said matched
+    // nothing, so a name with a number word in it ("OneNote") is never changed (VOICE_INTENT I3).
+    if !routed.success {
+        let digits = with_digits(&text);
+        if digits != text {
+            let again = route(&digits);
+            if again.success {
+                routed = again;
+            }
+        }
+    }
     // An app that is not on this PC is no command: "open the door" stays words, "open chatgpt" opens
     // the site. In "open X on … and open Y on …" the apps that are there still open.
     let (found, missing) = match routed.action.clone().filter(|_| routed.success) {
@@ -146,13 +156,13 @@ pub fn decide(
     Decided { notes, decision }
 }
 
-/// Nothing sure to run. In a text field it was meant to be typed; with no field found it is typed
-/// too when it reads as prose ("I want to write an email…"), so a dictation is not lost because
-/// the field was never clicked. Otherwise: if one thing came close, it is safe and it exists, ask
-/// about it on the pad ("Did you mean …?"); never run it unasked. Else say it was not understood.
+/// Nothing sure to run. In a text field it was meant to be typed. With no text field it is never
+/// typed (VOICE_INTENT I2: it would land in whatever window is in front); dictation said without a
+/// field ("I want to write an email…") is caught earlier by `is_prose_about_writing`. Otherwise: if
+/// one thing came close, it is safe and it exists, ask about it on the pad ("Did you mean …?");
+/// never run it unasked. Else say it was not understood.
 fn no_command(f: &Facts<'_>, phrase: &gate::Phrase, routed: &RouteResult, exists: &dyn Fn(&str) -> bool) -> Decision {
-    let prose = !gate::reads_as_command(phrase);
-    if (f.in_text_field || prose) && !phrase.addressed {
+    if f.in_text_field && !phrase.addressed {
         return Decision::Type;
     }
     let is_launch = |kind: &str| ActionKind::of_ignore_case(kind) == ActionKind::LaunchApp;
@@ -174,16 +184,26 @@ fn no_command(f: &Facts<'_>, phrase: &gate::Phrase, routed: &RouteResult, exists
         Some((_, app)) => format!("There is no app called \"{app}\" on this PC."),
         None => routed.message.clone().unwrap_or_else(|| "No match.".into()),
     };
-    // Never lose a transcript (1.7): a miss that is long or does not start like a command may be
-    // dictation into a field that was not found (or not readable): type it, and keep it on the
-    // clipboard. A short command-like miss is reported and copied.
-    let then_type = !phrase.addressed && (phrase.words > 4 || !looks_like_command(&phrase.command));
+    // A command that matched nothing is never typed (VOICE_INTENT I2): with no text field in
+    // front it would land in whatever window that is. It is reported, and kept on the clipboard in
+    // case it was meant as text, so nothing said is lost.
     Decision::NoMatch {
         log: format!("Voice no_match: \"{}\" ({detail})", f.transcript),
         detail,
-        then_type,
-        copy_to_clipboard: !then_type && f.verified && f.live,
+        copy_to_clipboard: f.verified && f.live,
     }
+}
+
+/// `text` with its number words as digits, for a command that did not match as said: the dictation
+/// converter for larger numbers ("seventy five" → 75, "fifty percent" → 50%), and zero to ten
+/// too, which in a command are always a value ("volume five").
+fn with_digits(text: &str) -> String {
+    const SMALL: [&str; 11] = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    crate::speech::numbers::apply(text)
+        .split(' ')
+        .map(|w| SMALL.iter().position(|s| *s == w).map_or_else(|| w.to_string(), |n| n.to_string()))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// `action` without the apps that are not on this PC, and their names. One app: no action at all.
@@ -265,7 +285,8 @@ mod tests {
                 approval: ApprovalMode::FirstUse,
             };
             let mut routed = Some(routed);
-            let mut route = |_: &str| routed.take().expect("routed once");
+            // Asked again only for the number retry; that one matches nothing.
+            let mut route = |_: &str| routed.take().unwrap_or_else(missed);
             decide(&facts, &mut route, &|app: &str| app != "nowhere", &|_: &ButtonAction| self.shell)
         }
     }
@@ -350,16 +371,44 @@ mod tests {
     }
 
     #[test]
-    fn a_long_miss_is_typed_and_a_short_command_like_one_is_copied() {
-        let Decision::NoMatch { then_type, copy_to_clipboard, .. } = pc().hear("open the big blue door right now", missed()).decision else {
-            panic!("no match expected")
-        };
-        assert!(then_type && !copy_to_clipboard);
+    fn a_miss_is_never_typed_but_kept_on_the_clipboard() {
+        for said in ["open the big blue door right now", "Set to volume seventy five."] {
+            let Decision::NoMatch { copy_to_clipboard, .. } = pc().hear(said, missed()).decision else {
+                panic!("no match expected for {said:?}")
+            };
+            assert!(copy_to_clipboard, "{said:?}");
+        }
         let d = pc().hear("open the dor", missed());
         assert_eq!(
             d.decision,
-            Decision::NoMatch { detail: "No match.".into(), log: "Voice no_match: \"open the dor\" (No match.)".into(), then_type: false, copy_to_clipboard: true }
+            Decision::NoMatch { detail: "No match.".into(), log: "Voice no_match: \"open the dor\" (No match.)".into(), copy_to_clipboard: true }
         );
+    }
+
+    #[test]
+    fn spoken_numbers_are_tried_as_digits_when_the_words_match_nothing() {
+        assert_eq!(with_digits("set to volume seventy five"), "set to volume 75");
+        assert_eq!(with_digits("volume fifty percent"), "volume 50%");
+        assert_eq!(with_digits("set volume to five"), "set volume to 5");
+        // The real router, as the engine calls it: the volume phrases from 2026-11-18 now run.
+        for said in ["Set to volume seventy five.", "Set Volume Seventy five.", "volume five"] {
+            let facts = Facts {
+                transcript: said, in_text_field: false, fragments: &[], glossary: &[], allow_type_text: true,
+                edit_commands: false, verified: true, live: true, trusted: &HashSet::new(), approval: ApprovalMode::FirstUse,
+            };
+            let mut route = |t: &str| super::super::route(t, &[], &super::super::RouterSettings::default());
+            let d = decide(&facts, &mut route, &|_: &str| true, &|_: &ButtonAction| false);
+            assert!(matches!(&d.decision, Decision::Run { label, .. } if label.starts_with("VOLUME")), "{said:?}: {:?}", d.decision);
+        }
+        // A name that matched as said is never rewritten: only a miss is retried.
+        let mut calls = Vec::new();
+        let facts = Facts {
+            transcript: "open one note", in_text_field: false, fragments: &[], glossary: &[], allow_type_text: true,
+            edit_commands: false, verified: true, live: true, trusted: &HashSet::new(), approval: ApprovalMode::FirstUse,
+        };
+        let mut route = |t: &str| { calls.push(t.to_string()); matched(ButtonAction { kind: "LaunchApp".into(), value: "onenote".into(), steps: vec![] }, "ONENOTE") };
+        let _ = decide(&facts, &mut route, &|_: &str| true, &|_: &ButtonAction| false);
+        assert_eq!(calls, ["open one note"]);
     }
 
     #[test]

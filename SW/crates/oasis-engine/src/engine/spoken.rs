@@ -108,16 +108,14 @@ pub(super) fn handle_heard(
             let steps = steps_of(&action);
             return Some(Pending { action, steps, summary, heard: heard.text.clone(), label, until: now.plus(CONFIRM_TIMEOUT) });
         }
-        Decision::NoMatch { detail, log: line, then_type, copy_to_clipboard } => {
+        Decision::NoMatch { detail, log: line, copy_to_clipboard } => {
             say("no_match", "", &detail);
             log.write(&line);
-            if then_type {
-                ctx.shared.emit(EngineEvent::Note { text: "That matched no command, so it was typed as text and kept on the clipboard.".into() });
-            } else if copy_to_clipboard {
+            if copy_to_clipboard {
                 let _ = oasis_win::clipboard::set_text(&heard.text);
-                ctx.shared.emit(EngineEvent::Note { text: "What you said is on the clipboard, in case it was meant as text.".into() });
+                ctx.shared.emit(EngineEvent::Note { text: "Didn't understand that as a command, so nothing was typed. It is on the clipboard in case it was meant as text.".into() });
             }
-            then_type
+            false
         }
     };
     if typed {

@@ -1926,15 +1926,15 @@ fn with_no_text_field_an_app_that_is_not_installed_is_reported_not_launched() {
 }
 
 #[test]
-fn with_no_text_field_a_long_sentence_that_matched_nothing_is_typed_and_logged() {
-    // 1.7: a field UI Automation cannot read looks like "no field"; a long "open …" sentence is
-    // reported, typed anyway (it may be prose), and logged with the heard text.
+fn with_no_text_field_a_long_sentence_that_matched_nothing_is_never_typed_but_logged() {
+    // VOICE_INTENT I2: with no text field, a command that matched nothing is never typed (it would
+    // land in whatever window is in front). It is reported, kept on the clipboard, and logged.
     let said = "Open via zzq might primary screen and open qwx in my second screen.";
     let v = start_gate("gate-misheard", false, &[], said);
     say_and_settle(&v);
-    v.h.wait(|h| !h.actions().is_empty(), "the sentence to be typed");
-    assert_eq!(v.h.actions(), [format!("paste {said} ")]);
-    assert!(commands(&v.h).contains(&(String::new(), "no_match".to_string())));
+    v.h.wait(|h| commands(h).contains(&(String::new(), "no_match".to_string())), "the miss to be reported");
+    thread::sleep(Duration::from_millis(300));
+    assert!(v.h.actions().is_empty(), "nothing typed: {:?}", v.h.actions());
     let log = fs::read_to_string(v.h.paths.security_log()).unwrap_or_default();
     assert!(log.contains(said), "{log}");
 }
