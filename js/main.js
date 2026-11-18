@@ -12,7 +12,7 @@
 })();
 
 // Show the newest released version next to the download button; the static text stays if the API is unreachable.
-fetch('https://api.github.com/repos/dhanushscience/OASIS/releases/latest')
+fetch('https://api.github.com/repos/dhanushscience/PROJECT-OASIS/releases/latest')
   .then((r) => (r.ok ? r.json() : null))
   .then((d) => {
     const m = document.getElementById('hero-meta');
