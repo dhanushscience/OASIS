@@ -1,0 +1,6 @@
+(fp_lib_table
+	(version 7)
+	(lib (name "New_XIAO_Series_Footprints") (type "KiCad") (uri "${KIPRJMOD}/Resource/New_XIAO_Series_Footprints") (options "") (descr ""))
+	(lib (name "TYPE-C-31-G-10") (type "KiCad") (uri "${KIPRJMOD}/Resource/TYPE-C-31-G-10") (options "") (descr ""))
+	(lib (name "TS16-1212-75-BK-100-SMT-TR") (type "KiCad") (uri "${KIPRJMOD}/Resource/TS16-1212-75-BK-100-SMT-TR") (options "") (descr ""))
+)
