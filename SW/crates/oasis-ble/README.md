@@ -10,8 +10,7 @@ Port of the Bluetooth half of `Services/BleManager.cs`.
 once. Its async runtime (tokio) is kept inside this crate; everything else stays runtime-free
 (DECISIONS D3, D14).
 
-**When:** created at startup, owned by `PadConnector`, which calls `scan`, `connect`,
-`next_notification` and `write` from its poll loop.
+**When:** created at startup (`oasis_engine::defaults::windows::parts`, and the CLI's `ble-scan`/`ble-listen`), then moved into a `PadConnector`. In the engine that connector lives on the `oasis-pad` thread, which calls `scan`, `connect`, `next_notification` and `write` from its poll loop. Every call blocks; nothing here is async to callers.
 
 ## Interface
 
@@ -43,7 +42,7 @@ Public symbols: `BleTransport` (`new`; implements `PadTransport`), `pad_id`.
 
 ## Side Effects
 
-- Bluetooth scanning, connecting and GATT writes; runs an internal tokio runtime.
+- Bluetooth scanning, connecting and GATT writes; runs an internal tokio runtime (multi-thread, one worker thread). Each `PadTransport` call blocks the calling thread until it finishes.
 
 ## Verification
 

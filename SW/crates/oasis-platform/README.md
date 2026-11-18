@@ -15,42 +15,44 @@ as-is, instead of a crash.
 (send keys, pause media, read the foreground window, talk to the pad).
 
 **How:**
+- Plain threads and blocking I/O; no async runtime. The pad link is poll-driven: the engine's `oasis-pad` thread calls `PadConnector::poll`.
+- The real Bluetooth transport (`PadTransport`) is `BleTransport` in `oasis-ble`, not here.
+- On Windows the OS calls go through `oasis-win` and `oasis-dpapi`; this crate wraps them in the portable traits.
 
 ## Interface
 
 | Path | Status | Contents |
 |---|---|---|
-| `src/lib.rs` | ✅ | `Os::current()`, `Os::name()`, `backend_status()` |
-| `src/browser_bridge.rs` | ✅ | `BridgeServer` (`start`, `port`, `clients`, `send_command`, `push_settings`, `stop`), `BridgeEvent`, `DEFAULT_PORT`, `write_token_files` |
+| `src/lib.rs` | ✅ | `Os::current()`, `Os::name()`, `backend_status()` (every OS still reports `not_built_yet`) |
+| `src/browser_bridge.rs` | ✅ | `BridgeServer` (`start`, `port`, `clients`, `send_command`, `push_settings`, `stop`), `BridgeEvent`, `DEFAULT_PORT`, `write_token_files`. Threads: `oasis-bridge-accept`, one `oasis-bridge-client` per connection |
 | `src/extension_install.rs` | ✅ | `ensure_published`, `published_folder`, `bundled_source_candidates`, `EXTENSION_FOLDER_NAME` |
-| `src/foreground.rs` | ✅ | `ForegroundTracker`, `WindowSnapshot`, `WindowSource` |
+| `src/foreground.rs` | ✅ | `ForegroundTracker` (`current_for_press`, `set_url_profiles_exist`, `set_panel_profiles_exist`, `read`), `WindowSnapshot`, `WindowSource` |
 | `src/integrity.rs` | ✅ | `HmacSigner`, `KeyProvider` (HMAC-SHA256 over `profiles.json`) |
-| `src/pad_connector.rs` | ✅ | `PadConnector`, `PadStatus`, `ConnectorEvent` |
+| `src/pad_connector.rs` | ✅ | `PadConnector` (poll-driven, one caller thread: `poll`, `pause`, `send`, `is_connected`, `set_pings_enabled`), `PadStatus`, `ConnectorEvent` |
 | `src/profile_icons.rs` | ✅ | `is_managed`, `resolve_managed`, `delete_managed` |
 | `src/profile_store.rs` | ✅ | `ProfileStore`, `LoadOutcome`, `SaveError`, `SettingsIntegrity` |
 | `src/secrets.rs` | ✅ | Secret-name constants (`GEMINI_API_KEY`, ...), `get_or_create_bridge_token` |
 | `src/security_log.rs` | ✅ | `SecurityLog` |
 | `src/trusted_device.rs` | ✅ | `TrustedDevice` (`load`, `id`, `is_trusted`, `trust`) |
-| `src/paths.rs` | ✅ all OSes | Data/model/log locations. Windows paths match the C# app exactly |
+| `src/paths.rs` | ✅ all OSes | `OasisPaths`: data, model, log, history and icon locations (`OASIS_DATA_DIR` override is applied by `oasis-engine`'s `detect_paths`). Windows paths match the C# app exactly |
 | `src/atomic_file.rs` | ✅ all OSes | Temp-file → fsync → rename writes (`profiles.json` cannot be half-written) |
 | `src/crash_log.rs` | ✅ all OSes | Rotating crash log that never panics; panic hook |
-| `src/ports.rs` | ✅ traits | `PadTransport`, `ForegroundApp`, `InputInjector`, `SecretStore`, `MediaSessions`, `Microphone`, `Autostart`, `Speaker`, `ButtonSource`, `PlatformError`, `not_built_yet` |
-| `src/windows/` | 🟡 partly built | Plan + C# sources to port from → [README](src/windows/README.md) |
+| `src/ports.rs` | ✅ traits | `PadTransport`, `ForegroundApp`, `InputInjector`, `SecretStore`, `MediaSessions`, `Microphone`, `Autostart`, `ButtonSource`, `PadInfo`, `ForegroundInfo`, `PlatformError`, `PlatformResult`, `not_built_yet`; also the window-typing flag and the queue of buttons pressed from the OASIS window (`set_window_typing`, `press_from_window`, `set_window_wake`, `take_window_buttons`) |
+| `src/windows/` | 🟡 partly built (foreground, input, secrets, keyboard buttons, actions, app discovery, startup) | Plan + C# sources to port from → [README](src/windows/README.md) |
 | `src/macos/` | 🔲 backends | Plan + permissions needed → [README](src/macos/README.md) |
 | `src/linux/` | 🔲 backends | Plan + X11/Wayland caveats → [README](src/linux/README.md) |
 
 Only the module for the OS being compiled is built (`#[cfg(target_os = …)]`). The shared
 status table lives in `ports.rs` so all three report the same way.
 
-Backends need third-party crates (btleplug, cpal, windows, objc2, zbus, keyring). They are
-listed in `Cargo.toml` and get added one backend at a time.
+Backends need third-party crates (cpal, objc2, zbus, keyring); `Cargo.toml` lists what is planned and adds them one backend at a time. On Windows it depends on `oasis-win` and `oasis-dpapi`. `btleplug` is used by `oasis-ble`.
 
 Subdirectories: [`src/windows/`](src/windows/README.md), [`src/macos/`](src/macos/README.md),
 [`src/linux/`](src/linux/README.md), [`examples/`](examples/README.md).
 
 ## Invariants
 
-- This crate is the place for OS and file access (with `oasis-win`, `oasis-dpapi`, `oasis-ble`, `oasis-voice`); `unsafe_code` is forbidden workspace-wide except in `oasis-win` and `oasis-dpapi`.
+- This crate is the place for OS and file access (with `oasis-win`, `oasis-dpapi`, `oasis-ble`, `oasis-voice`); `unsafe_code` is forbidden workspace-wide; `oasis-win`, `oasis-dpapi` (and `oasis-voice` for its speech engine) opt out.
 - Writes of `profiles.json` go through `atomic_file` (temp file, fsync, rename), never directly.
 - `backend_status()` and `ports::not_built_yet` report a missing backend as `CapabilityState::Missing` with a reason; they never panic.
 - `crash_log` and `security_log` writers never panic.
@@ -59,6 +61,7 @@ Subdirectories: [`src/windows/`](src/windows/README.md), [`src/macos/`](src/maco
 ## Side Effects
 
 - Disk: profiles, signature, trusted-device file, crash/security/voice/dictation logs, models folders, profile icons, published browser extension (all located by `OasisPaths`).
+- Threads: the bridge threads above; short-lived ones for launching and fronting programs, `RunScript`/AutoHotkey, and the app-list refresh (`warm`).
 - Network: `BridgeServer` listens for the browser extension on `DEFAULT_PORT`.
 - Process: `CrashLog::install_panic_hook` replaces the global panic hook.
 

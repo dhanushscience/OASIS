@@ -2,9 +2,9 @@
 
 ## Overview
 
-**What:** the loop that makes the pad do things. One thread reads the pad, applies the gesture
-rules, works out which profile applies to the app in front, and hands the button's action to a
-worker thread. It has no window; it reports through events and a status snapshot.
+**What:** the loop that makes the pad do things. One loop thread applies the gesture
+rules to what the pad thread reads, works out which profile applies to the app in front, and
+hands the button's action to an action worker thread. It has no window; it reports through events and a status snapshot.
 
 **Why its own library:** the desktop app and the command line both need this exact loop. Keeping it
 out of both means they cannot disagree, and it can be tested end to end with a pretend pad (the C#
@@ -37,19 +37,39 @@ that way).
 - Lock order is always `settings` then `store`, so the two cannot deadlock.
 - `OASIS_DATA_DIR` (see `defaults::detect_paths`) points the engine at a folder other than the real
   one, for rehearsing on a copy.
-- Actions run one at a time on a worker thread, so a long step cannot block the pad.
-- **The loop never waits on slow work.** It sleeps on one inbox until something arrives (pad,
-  keyboard, YouTube, a read of the app in front) or the next thing is due (a gesture timer, the
-  label peek, a confirmation, the timed checks, and every 10 ms while voice records). The pad
-  thread (`oasis-pad`) scans for and reads the pad; the front thread (`oasis-front`) reads what is
-  in front (UI Automation). A press asks the front thread for a fresh read and is handled when the
-  answer comes, in press order; a capture waits for "typed or a command?" with the mic already open.
-  The YouTube gestures use the front thread's last look (at most 100 ms old). Spoken commands
-  still read the app in front on the loop.
+- **Threads.** Each has one owner and one job:
+  - `oasis-engine`: the loop (`run_loop`). The only writer of the gesture rules, the profile choice
+    and the voice session. Blocks on one inbox (`Input`, in `src/inbox.rs`) with `recv_timeout`,
+    waking at the next deadline (a gesture timer, the label peek, a confirmation, the meeting,
+    reminder and settings-file checks, the memory log, and every 10 ms while voice records).
+  - `oasis-pad`: owns the `PadConnector`. Scans, connects, reads, and posts each event as
+    `Input::Pad`. The loop switches it on and off over a small channel (pad off lets go of the pad).
+  - `oasis-front`: reads what is in front (UI Automation, up to a second) and whether a text field
+    has focus (up to 250 ms). Posts `Input::Front` when it changed (it looks every 100 ms) and
+    answers each ask from the loop (`FrontAsk`), one at a time, in order. A press asks for a fresh
+    read and is handled when `Input::ForPress` comes back, in press order; a capture waits for
+    "typed or a command?" (`Input::Capture`) with the mic already open. The YouTube gestures use
+    the front thread's last look (at most 100 ms old).
+  - `oasis-actions` (ordered lane) and `oasis-actions-free` (focus-free jobs only, so a slow "open
+    app" does not hold up a volume key or a timer). Each runs one job at a time. A job with
+    `prepare` always goes to the ordered lane: a dictation's cleanup and the S1-mini polish run
+    there, so the loop never waits on them and a later press still runs after the paste.
+  - `oasis-speech` (in `src/voice.rs`): transcribes recordings. The loop polls its results.
+  - Short-lived threads: the Google Calendar refresh (every 60 s, because the network can be
+    slow), polish model start-up and downloads.
+  - The foreground probe is shared (`SharedProbe`, a mutex held for one read), because the loop
+    also reads it for spoken commands.
+- **Outside edits of `profiles.json`:** `oasis_win::watch::FolderWatch` (Windows only) posts
+  `Input::SettingsFileChanged` when something is written in the settings folder, and the loop
+  checks the file at once. A 30 s safety-net check covers a missed change. If the watcher cannot
+  start, a note goes to the security log and the file is checked every 1.5 s instead.
+- Stopping: `stop` sets a flag and wakes the loop; the loop ends the pad and front threads, then
+  drops the job senders, which ends both action workers, and emits `Stopped`.
+- Actions never run on the loop, and the loop never waits on slow work.
 
 | File | Contents |
 |---|---|
-| `src/engine.rs` | The loop (`run_loop`) and its small helpers; re-exports the public items of `engine/` |
+| `src/engine.rs` | The loop (`run_loop`) and its small helpers; re-exports the public items of `engine/` (see [src/engine/README.md](src/engine/README.md)) |
 | `src/engine/parts.rs` | What the engine is given: `EngineParts`, `EngineConfig`, `BridgeConfig`, `ForegroundProbe`, `BackendContext`, `BackendFactory`, `EngineError`, `ChangeError` |
 | `src/engine/handle.rs` | The shared state (`Shared`), `EngineHandle`, `start` |
 | `src/engine/dispatch.rs` | A recognised gesture: the label peek, `dispatch`, `plan` |
@@ -58,7 +78,7 @@ that way).
 | `src/engine/dictation.rs` | Dictation: cleanup, polish, trace log, talk cues, `paste_typed`, `dictation_style` |
 | `src/engine/bridge.rs` | The browser-extension socket (`sync_bridge`) and preferences |
 | `src/engine/layouts.rs` | Spoken layouts: save and restore open windows as a Quick Launch setup |
-| `src/inbox.rs` | What wakes the loop (`Input`), the pad thread and the front thread |
+| `src/inbox.rs` | What wakes the loop (`Input`), the pad thread (`spawn_pad`), the front thread (`spawn_front`), `SharedProbe` |
 | `src/events.rs` | `EngineEvent`, `Press`, `EngineStatus`, `FrontApp` (all `Serialize`, for the page) |
 | `src/defaults.rs` | The real Windows parts (`windows::parts()`), `detect_paths` |
 | `src/voice.rs` | Push-to-talk dictation: `VoiceMic`, `VoiceParts`, `Voice`, `Heard` |
@@ -67,7 +87,8 @@ that way).
 | `src/model_download.rs` | Resumable, SHA-256-checked voice model downloads (`download_set`) |
 | `src/self_check.rs` | Times the speech and polish models on this PC (`measure`) |
 | `examples/self_check.rs` | Before a release: decodes the test clip with every installed speech model and times one polish |
-| `assets/voice-in.wav`, `assets/voice-out.wav` | The talk cues, made by `assets/make_cues.py` from `assets/cue-sources/` |
+| `assets/voice-in.wav`, `assets/voice-out.wav`, `assets/voice-wake.wav` | The talk cues, made by `assets/make_cues.py` from `assets/cue-sources/` |
+| `assets/selfcheck-16k.wav`, `assets/selfcheck.txt` | The test clip and its text, used by `self_check` |
 | `src/history.rs` | Opt-in dictation history, WAV + JSON per dictation |
 | `src/quick_launch.rs` | `Runner`: opens a Quick Launch setup's items and places windows |
 | `src/meetings.rs` | Google Calendar sign-in, upcoming meetings, reminders, joining |
@@ -75,10 +96,10 @@ that way).
 | `src/reminders.rs` | Alarms, timers and reminders saved to `reminders.txt` |
 | `src/use_counts.rs` | `UseCounts`: profile press counts in `profile_use.json` |
 | `src/activity.rs` | `work()` guard, `busy()`, `set_voice_active`: "restart only when idle" |
-| `tests/engine.rs` | Fifty-five end-to-end tests with a fake pad, fake foreground and recording backend: saving, reloading, adding, moving and deleting profiles while running, and multi-step buttons |
+| `tests/engine.rs` | End-to-end tests (about 109) with a fake pad, fake foreground and recording backend: saving, reloading, adding, moving and deleting profiles while running, and multi-step buttons |
 
-Not here yet: watching `profiles.json` for outside changes (reload is manual),
-voice, AI. (The overlay and the YouTube bridge are in; see the notes above and below.)
+Voice (push-to-talk, spoken commands, dictation polish) and the overlay and YouTube bridge are in; see the notes below. The engine has no AI features beyond the S1-mini sentence polish and optional Groq speech-to-text.
+
 - **Browser extension (`BridgeConfig`):** with a token the engine runs the extension's socket
   (when `BrowserBridgeEnabled`), keeps a `YouTubeWatchState` from its events, and passes the
   state's token to profile matching so a `youtube.playing` set of buttons is chosen. On each
@@ -89,8 +110,8 @@ voice, AI. (The overlay and the YouTube bridge are in; see the notes above and b
 - **Push-to-talk (`VoiceParts`):** with a microphone, a speech model check and a speech-engine
   loader passed in, the engine runs `oasis_core::voice` for dictation: on button-down of a
   push-to-talk button it starts listening (pre-roll), a capture begins when the gesture rules say,
-  a playing YouTube video is paused and resumed, the recording is transcribed on its own thread
-  when you let go, and the text is typed as a `PasteText` action (only when actions are on).
+  a playing YouTube video is paused and resumed, the recording is transcribed on the `oasis-speech` thread
+  as you speak (pieces) and when you let go, and the text is cleaned and polished on the action worker (`Job.prepare`) and typed as a `PasteText` action (only when actions are on).
   Events `Voice { phase }` (`listening`, `dictating`, `thinking`, `idle`) and `Transcript`.
   Status `voice`: `ready`, `off`, `no_model`, `unavailable`.
 - **Spoken commands:** each recording is a typed dictation or a command (capture mode, the
@@ -105,7 +126,7 @@ voice, AI. (The overlay and the YouTube bridge are in; see the notes above and b
   profile matcher chooses that set. `crates/oasis-platform/examples/panel_probe.rs` prints it live.
 
 ## Interface
-- `src/engine.rs` (items in `src/engine/handle.rs`, `src/engine/parts.rs`): `start(config, parts, on_event) -> EngineHandle` (`stop`, `status`, `set_live`, `change`, `reload_settings`, `accept_edited_settings`, `settings`), `EngineParts<T: PadTransport>`, `EngineConfig`, `BridgeConfig`, `BackendContext`, `BackendFactory`, `ForegroundProbe`, `EngineError`, `ChangeError`.
+- `src/engine.rs` (re-exports; items in `src/engine/handle.rs`, `src/engine/parts.rs`): `start(config, parts, on_event) -> EngineHandle` (`stop`, `status`, `set_live`, `change`, `reload_settings`, `accept_edited_settings`, `settings`, `try_button`, `profile_use_counts`, `paths`, `meetings`, `answer_meeting_reminder`, `hold_keys`), `EngineParts<T: PadTransport>`, `EngineConfig`, `BridgeConfig`, `BackendContext`, `BackendFactory`, `ForegroundProbe`, `EngineError`, `ChangeError`.
 - `src/events.rs`: `EngineEvent`, `Press`, `EngineStatus`, `FrontApp`.
 - `src/defaults.rs`: `windows` module (real parts), `detect_paths`.
 - `src/lib.rs`: modules `activity`, `defaults`, `engine`, `events`, `groq`, `history`, `meetings`, `polish`, `model_download`, `quick_launch`, `reminders`, `self_check`, `spotify`, `use_counts`, `voice`.
@@ -116,7 +137,7 @@ voice, AI. (The overlay and the YouTube bridge are in; see the notes above and b
 - Lock order is always `settings` then `store`.
 - A bad settings signature: gesture rules refuse to dispatch, `set_live(true)` is refused.
 - `change` is all-or-nothing: if the edit or the save fails, nothing changes anywhere.
-- Actions run one at a time on a worker thread; in preview mode (`live = false`) nothing executes.
+- Actions run one at a time per lane (ordered and focus-free), never on the loop; in preview mode (`live = false`) nothing executes.
 - The engine never draws; overlay and windows belong to the desktop app.
 - A script never runs by voice; a voice command is refused, run, or confirmed on the pad (30 s timeout).
 - Model downloads are kept as `<name>.part` and renamed only after the SHA-256 check passes.
@@ -129,3 +150,4 @@ voice, AI. (The overlay and the YouTube bridge are in; see the notes above and b
 
 ## Verification
 - Run: `cargo test -p oasis-engine`
+- Before a release: `cargo run -p oasis-engine --example self_check`

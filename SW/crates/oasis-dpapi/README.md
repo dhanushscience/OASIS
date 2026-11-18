@@ -1,7 +1,7 @@
 # oasis-dpapi
 
 ## Overview
-Windows DPAPI protect and unprotect with current-user scope and optional entropy. Output is byte-for-byte what .NET `ProtectedData` wrote, so the C# app's `secrets/*` files still open. With `oasis-win`, one of the two crates allowed to use `unsafe` (the `os` module in `src/lib.rs`).
+Windows DPAPI protect and unprotect with current-user scope and optional entropy. Output is byte-for-byte what .NET `ProtectedData` wrote, so the C# app's `secrets/*` files still open. With `oasis-win`, one of the crates meant for `unsafe` (here only the Windows `os` module in `src/lib.rs`; `oasis-voice` also allows it for its speech engine binding). Used by `oasis-platform` (`windows/dpapi.rs`).
 
 ## Interface
 - `protect(plain, entropy) -> Result<Vec<u8>, DpapiError>` and `unprotect(blob, entropy)`.

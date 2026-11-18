@@ -1,27 +1,25 @@
 # `docs/` — design documents
 
-**What:** the documents you need before a larger change to the Rust app.
+**What:** a pointer. This folder holds no design documents in git.
 
-**Why:** the code says *how*; these say *why* and *what's left*, which the code cannot.
+**Why:** the long design notes (status, porting map, decisions, voice design and benchmarks,
+update flow, architecture) are kept on the owner's machine, not in the repository. Many crate
+READMEs still cite them by name, for example `DECISIONS D13` or `docs/VOICE_DECISIONS.md V38`.
+Read those as references to the private notes.
 
-**When to read:** before starting a new area or making an architectural change; update them in
-the same change that makes them wrong.
+**What to read in git instead:**
 
-| File | Read it when |
+| Question | Read |
 |---|---|
-| `TECHNICAL_OVERVIEW.md` | **Start here for how it works**: pad and voice pipelines, function by function |
-| `STATUS.md` | **Start here.** What works, how sure we are, what is missing, in plain words |
-| `PORTING.md` | You want to know what is ported, what is next, and which C# file maps where |
-| `WINDOWS_BACKEND.md` | You want the Windows work in order and how each piece was checked |
-| `DECISIONS.md` | You need the decisions made (UI toolkit, async runtime, model runtimes, …) and why |
-| `VOICE_DECISIONS.md` | **Start here for voice**: every decision on voice behaviour, speed and models, and the build order |
-| `VOICE_PIPELINE.md` | You need the voice design in full: the analysis, the intent gate, the cleanup tiers, the latency budget |
-| `VOICE_BENCH.md` | You need the measured speed, accuracy and memory of each speech and polish model |
-| `VOICE_MODEL_SETUP.md` | You need to know which PC runs which model, and how models are downloaded and loaded |
-| `VOICE_MODEL_RESEARCH.md`, `VOICE_BASELINE_HARDWARE.md` | You need the research behind the model and hardware choices |
-| `UPDATES.md` | You are shipping an update, or moving releases to one repo |
-| `ARCHITECTURE.md` | You need the layer rules, the threading model, or where new code goes |
-| `PLATFORMS.md` | You are working on Windows / macOS / Linux specifics |
+| What is in the app and where | [`../README.md`](../README.md) |
+| Which crate owns what, and the layer rules | [`../crates/README.md`](../crates/README.md) |
+| How the pad and voice pipelines run | [`../crates/oasis-engine/README.md`](../crates/oasis-engine/README.md), [`../crates/oasis-core/README.md`](../crates/oasis-core/README.md) |
+| What the programs do | [`../apps/README.md`](../apps/README.md) |
+| Packaging, releases, model publishing, benchmarks | [`../scripts/README.md`](../scripts/README.md) |
+| CI | [`../ci/README.md`](../ci/README.md) |
 
-The wire protocol and product behaviour specs stay authoritative in the C# repo for now:
+**When to update:** when a crate README cites a decision that matters to a contributor, put the
+reason in that README so it does not depend on the private notes.
+
+The BLE wire format and product behaviour specs stay authoritative in the C# repo for now:
 `OASIS/docs/PROTOCOLS.md`, `OASIS/SW/docs/FEATURES.md`.

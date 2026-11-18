@@ -31,7 +31,7 @@ It is its own tiny, std-only crate because the format is **frozen**: firmware an
 - The format is frozen; changes must stay compatible with `docs/PROTOCOLS.md` section 1.
 
 ## Side Effects
-- None. Pure parsing and formatting; the BLE transport lives in `oasis-platform`.
+- None. Pure parsing and formatting; the BLE transport is `oasis-ble` (it implements the `PadTransport` trait from `oasis-platform`), and `oasis_app::PadLink` feeds notification bytes through `LineDecoder`.
 
 ## Verification
 - Run: `cargo test -p oasis-protocol` (`tests/wire_format.rs` covers every example from `docs/PROTOCOLS.md` section 1)

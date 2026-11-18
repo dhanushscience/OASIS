@@ -9,7 +9,7 @@ The Svelte 5 components of the OASIS window. `../App.svelte` composes them into 
 - Practice: `TryCommands` (a practice box and checklist; which step an event completes is `../tryCommands.js`). Shown in Settings › Voice ("Try voice commands", under Voice commands) and, with `compact`, in `Welcome`'s `try_commands` step after the voice part of the guide. Escape and Ctrl+F typed in its box stop there, so they do not close the window or jump to its search.
 - Screens: `ProfilesScreen` (with `ProfileStrip`, `ProfileHeader`, `PadView`, `KeyboardView`, `ConfigurePanel`, `ActionField`, `AppInput`, `FlowBuilder`, `ScriptEditor`, `KeyBox`, `KeyMapDialog`), `QuickLaunchScreen`, `VoiceScreen`, `InsightsScreen`, `InputScreen`, `OverlayScreen`, `AppearanceCard`.
 - Widgets: `Select`, `Switch`, `Popover`, `OsLogo`.
-- Components that call Tauri commands directly (`invoke`): `ConfigurePanel`, `FlowBuilder`, `InsightsScreen`, `OverlayScreen`, `ProfileHeader`, `QuickLaunchScreen`, `UpdateCard`, `UpdatePrompt`, `VoiceScreen`; the rest use the state modules in `..` (`../profiles.svelte.js`, `../status.svelte.js`, ...).
+- Components that call Tauri commands directly (`invoke`): `ConfigurePanel`, `FlowBuilder`, `Guide`, `InsightsScreen`, `OverlayScreen`, `ProfileHeader`, `QuickLaunchScreen`, `SettingsDialog`, `UpdateCard`, `UpdatePrompt`, `VoiceScreen`, `Welcome`; `SideMenu` and `TopBar` call the Tauri app and window APIs; the rest use the state modules in `..` (`../profiles.svelte.js`, `../status.svelte.js`, ...). `SettingsDialog` hosts `InputScreen`, `VoiceScreen`, `ModelsCard`, `OverlayScreen`, `AppearanceCard` and `UpdateCard`, plus the old script's cards (`../legacy/`).
 
 ## Invariants
 - Deletes go through `../confirm.svelte.js` (`sure`), so each asks first.
@@ -17,7 +17,7 @@ The Svelte 5 components of the OASIS window. `../App.svelte` composes them into 
 - The engine is the judge of every value on save; components only draw and send.
 
 ## Side Effects
-- Tauri command calls save profiles, settings and Quick Launch setups, read history audio, and check or install updates (see `../../../src/main.rs`).
+- Tauri command calls save profiles, settings and Quick Launch setups, read and delete kept dictations (Insights), and check or install updates (see `../../../src/README.md`).
 
 ## Verification
 - Run: `npm run check` in `apps/oasis-desktop/web`.

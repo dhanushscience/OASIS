@@ -13,4 +13,4 @@ OASIS texts are used as the input: `tests/quality.rs` runs the rules over each a
 target lines reached. A text the rules already cleaned is a fair input, because the rules must
 leave their own output alone or improve it.
 
-`cargo test -p oasis-core --test quality -- --nocapture` prints the score.
+`cargo test -p oasis-core --test quality -- --nocapture` prints the score. The test pins target lines 2 to 5 as reached by both takes. Lines 1 and 6 need a model (joined sentences, "a mail" to "an email", a misheard name), so the rules alone miss them.

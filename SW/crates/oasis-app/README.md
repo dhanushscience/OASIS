@@ -3,9 +3,9 @@
 ## Overview
 The hosts that run the rules: the code that *drives* `oasis-core`. Port of `SW/Oasis.Application`. Reducers are pure and forgetful; this crate owns their state across events, feeds events in, keeps the timers the reducers ask for, and hands every other effect to a sink. Keeping this in one small layer (not in UI code, as `OverlayService` once did) keeps threading and timing in one place.
 
-For the whole life of the app, the BLE thread posts pad events; the main loop drains them, fires due timers, and sleeps until `timers().next_deadline()`.
+In the running app, `oasis-engine` is the owner: its `oasis-pad` thread posts pad events to the engine's inbox, and the `oasis-engine` loop thread calls `ArbiterHost::apply` and `fire_due` itself and sleeps until `timers().next_deadline()` (among other deadlines). The loop also owns a `PadLink` for decoding and telemetry. `Voice` (in `oasis-engine`) owns a `VoiceSessionHost`. Nothing in this crate starts a thread.
 
-Not ported yet: `QuickLaunch/QuickLaunchRunner.cs`, `Voice/IncrementalTranscriber.cs`, `Composition/InProcessEventBus.cs`, `OasisHost.cs`.
+Not ported (done elsewhere or dropped): `QuickLaunch/QuickLaunchRunner.cs` and `OasisHost.cs` live on in `oasis-engine` (`quick_launch.rs`, the loop). `CapabilityRegistry` is tested here but nothing outside this crate uses it yet. `Voice/IncrementalTranscriber.cs` and `Composition/InProcessEventBus.cs` have no port in this crate.
 
 ## Interface
 - `src/timers.rs`: `TimerQueue` (`set`, `cancel`, `cancel_all`, `is_set`, `is_empty`, `next_deadline`, `take_due`). C# `ITimerScheduler`, `ManualTimerScheduler`.
@@ -16,7 +16,7 @@ Not ported yet: `QuickLaunch/QuickLaunchRunner.cs`, `Voice/IncrementalTranscribe
 - `src/lib.rs`: module declarations; re-exports `ArbiterHost`, `CapabilityRegistry`, `PadLink`, `PadTelemetry`, `TimerQueue`, `VoiceSessionHost`.
 
 ## Invariants
-- Each host is **single-writer**: only the owning thread calls `apply`, `drain`, `fire_due`. Other threads send events through `sender()` (std `mpsc`). This is the C# `Channel` + `IWorkMarshal` design without an async runtime, so the UI layer picks its own loop.
+- Each host is **single-writer**: only the owning thread calls `apply`, `drain`, `fire_due`. Other threads can send events through `sender()` (std `mpsc`); the engine posts nothing this way today and calls `apply` directly. This is the C# `Channel` + `IWorkMarshal` design without an async runtime, so the UI layer picks its own loop.
 - `own_timers = false` is *shadow mode*: the host ignores timers and the caller ticks it.
 - Effects reach the outside world through a closure `&mut dyn FnMut(&Effect)` (the sink); `SetTimer` / `CancelTimer` are consumed by the host.
 - Setting a timer name that is already set replaces its deadline.

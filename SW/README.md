@@ -8,11 +8,14 @@ The original is the C# / WPF app in `OASIS/SW` (Windows only). This rebuild keep
 behaviour, same file locations and same pad protocol, and adds **macOS and Linux**.
 
 > **Status:** on Windows the pad works end to end: it connects, understands taps and holds,
-> picks the profile for the app or website in front of you, and runs the button's action. A small
-> desktop app (tray icon and status window) runs it. It cannot replace the C# app yet: no
-> settings window, overlay, voice, AI or YouTube gestures. **Read
-> [`docs/STATUS.md`](docs/STATUS.md)** for what is done, how sure we are, and what is missing;
-> [`docs/PORTING.md`](docs/PORTING.md) has the file-by-file detail.
+> picks the profile for the app or website in front of you, and runs the button's action. The
+> desktop app (Tauri) has a tray icon, a settings window (Status, Profiles and more), an overlay
+> and a HUD, Quick Launch, a first-run guide, accounts and an updater. On-device voice
+> (push-to-talk, dictation with optional history, voice commands), Spotify control, meetings and
+> reminders exist in the engine. Parts are still being checked by hand with beta testers, so
+> treat it as a beta, not a finished replacement for the C# app. The macOS and Linux backends are
+> not built yet. The older design notes (`STATUS.md`, `PORTING.md`, `DECISIONS.md`, voice docs)
+> are kept outside git; see [`docs/README.md`](docs/README.md).
 
 ---
 
@@ -27,23 +30,25 @@ SW/
 ├── Cargo.lock              Exact dependency versions (committed: this is an application)
 ├── README.md               This file
 ├── .gitignore              Keeps target/ and secrets out of git
-├── ci/                     GitHub Actions workflow for Windows + macOS + Linux (copy to repo root)
-├── docs/                   Status, design docs: STATUS first, then porting, decisions, architecture
+├── ci/                     Draft three-OS GitHub Actions workflow (the live one is ../.github/workflows/ci.yml)
+├── docs/                   Pointer to the design docs (kept outside git)
+├── scripts/                Beta packaging, model publishing and benchmarks (PowerShell)
+├── extensions/             Browser extension (oasis-youtube)
 ├── crates/                 Libraries — all the logic lives here
 │   ├── oasis-core/         Pure rules: gestures, actions, profile matching, shortcuts (no I/O)
 │   ├── oasis-protocol/     The pad's wire format over BLE (frozen, std-only)
 │   ├── oasis-app/          Hosts that run the rules, own timers, track capabilities
-│   ├── oasis-settings/     profiles.json: read, upgrade, profile matcher, gesture settings
+│   ├── oasis-settings/     profiles.json: read, upgrade, profile matcher, gesture settings, edits
 │   ├── oasis-platform/     OS-facing code: paths, storage, signing, pad connection logic, per-OS backends
-│   ├── oasis-models/       Swappable speech / language / voice models (the structure, no engines yet)
-│   ├── oasis-engine/       The running OASIS: pad → gestures → profile → action, in one loop
+│   ├── oasis-models/       Swappable speech / language / voice model traits and registry
+│   ├── oasis-engine/       The running OASIS: pad, voice, dictation, Quick Launch, Spotify, meetings, in one loop
 │   ├── oasis-ble/          Bluetooth transport (btleplug)
 │   ├── oasis-voice/        Microphone and on-device speech-to-text (sherpa-onnx loaded at run time)
 │   ├── oasis-win/          Small safe wrappers over Windows calls (windows, keys, shell, UI Automation)
 │   └── oasis-dpapi/        Windows per-user encryption, for secrets and the settings signature
 └── apps/                   Programs you run
     ├── oasis-cli/          `oasis` — run the chain, scan the pad, read a browser address, replay traffic
-    └── oasis-desktop/      The tray app and status window (Tauri 2). Settings window and overlay come next
+    └── oasis-desktop/      The desktop app (Tauri 2): tray, settings window, overlay, HUD, guide, updater
 ```
 
 ### How a button press flows through the folders
@@ -77,7 +82,7 @@ cargo test --workspace                     # every test (ported C# tests include
 cargo clippy --workspace --all-targets -- -D warnings   # zero warnings, like the C# build
 cargo run -p oasis-cli -- status           # what works on this OS today
 cargo run -p oasis-cli -- paths            # where OASIS keeps files here
-cargo run -p oasis-desktop                 # the tray app (Windows); starts in preview mode
+cargo run -p oasis-desktop                 # the desktop app (Windows); starts in preview mode
 cargo run -p oasis-cli -- run --dry-run 60 # press the pad: shows what each press would do
 printf '0 BTN:1:D\n400 BTN:1:U\n' | cargo run -p oasis-cli -- replay --youtube
 ```
@@ -95,7 +100,8 @@ The `replay` example prints:
 
 - [crates](./crates/README.md) - the eleven libraries holding all logic.
 - [apps](./apps/README.md) - `oasis-cli` and `oasis-desktop`, thin programs over the engine.
-- [ci](./ci/README.md) - the GitHub Actions workflow.
+- [ci](./ci/README.md) - the draft three-OS workflow.
+- [docs](./docs/README.md) - where the design docs live.
 - [scripts](./scripts/README.md) - release, packaging and model-publishing scripts (with [bench](./scripts/bench/README.md)).
 - [extensions/oasis-youtube](./extensions/oasis-youtube/README.md) - browser extension that talks to the local bridge.
 

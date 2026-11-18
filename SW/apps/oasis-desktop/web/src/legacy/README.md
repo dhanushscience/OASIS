@@ -1,10 +1,10 @@
 # oasis-desktop/web/src/legacy
 
 ## Overview
-The old window's script and styles, moved here as they were and restyled and typed screen by screen as each is rebuilt in Svelte. The Profiles editor is already gone from it.
+The old window's script and styles, moved here as they were and restyled and typed screen by screen as each is rebuilt in Svelte. The Profiles editor and the pad, Live and banner controls are already gone from it. It now fills the old cards in the Settings pop-up (Connections, system, Groq key, reload).
 
 ## Interface
-- `legacy.js`: untyped (`@ts-nocheck`) script loaded after the shell's markup exists. Calls the commands `status`, `system_status`, `restart_oasis`, `reload_settings`, `settings_fields`, `set_setting`, `groq_key_status`, `set_groq_key`, `test_groq_key`, `spotify_status`, `spotify_connect`, `spotify_disconnect`, `meetings_status`, `meetings_connect`, `meetings_disconnect`, `meeting_reminder_action`, `open_extension_folder`; listens to `engine-event`, `models-status`, `restart-needed`, `update-status`.
+- `legacy.js`: untyped (`@ts-nocheck`) script loaded after the shell's markup exists. Calls the commands `status`, `system_status`, `restart_oasis`, `reload_settings`, `settings_fields`, `set_setting`, `groq_key_status`, `set_groq_key`, `test_groq_key`, `spotify_status`, `spotify_connect`, `spotify_disconnect`, `meetings_status`, `meetings_connect`, `meetings_disconnect`, `meeting_reminder_action`, `open_extension_folder`; listens to `engine-event` only. Loaded by `../App.svelte` with a dynamic `import`; `openSection(name)` is its one export.
 - `legacy.css`: the old look on the new tokens, scoped to `.legacy` so it cannot leak into the shell.
 
 ## Invariants

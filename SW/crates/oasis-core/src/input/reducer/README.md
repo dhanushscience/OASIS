@@ -2,22 +2,22 @@
 
 ## Overview
 **What:** the `reduce()` function itself, split across four files by the kind of event it
-handles.
+handles (plus the shared helpers in `mod.rs`).
 
-**Why split:** it is about 780 lines, past the 500-line limit the C# project enforced. The C#
+**Why split:** it is about 800 lines, past the 500-line limit the C# project enforced. The C#
 original is split the same way (`PadReducer.cs` + `PadReducer.Transitions.cs`). Each file
 answers one question, so a bug report like "the tap runs on release, not press" points straight
 at one file.
 
 **When:** every pad event goes through `mod.rs::reduce`, which hands it to one of the three
-files below.
+files below. `Disconnected` is handled in `mod.rs` itself, and a button that is not a pad button is ignored.
 
 **How:** each handler takes the current `PadState` and returns a `Transition`. Shared checks
 (`allows` = "does the highest-priority claim with this id permit it?", `is_hidden_volume`,
-`arms_show_desktop`, `due`) live in `mod.rs`.
+`arms_show_desktop`, `due`, `try_dispatch_bound_tap`) live in `mod.rs`.
 
 ## Interface
-`reduce()` in `mod.rs` plus the handlers below.
+`reduce()` and the timer-name and hold-2x command constants in `mod.rs` (all re-exported by `../mod.rs`) plus the handlers below, which are private.
 
 | File | Handles | Answers |
 |---|---|---|

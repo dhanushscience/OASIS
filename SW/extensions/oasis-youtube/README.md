@@ -16,7 +16,7 @@ popup shows connection status and the hold-speed setting.
 |------|------|
 | `background.js` | Service worker. Websocket client with token handshake (`hello`), reconnect backoff (1.5 s to 15 s), queued sends, 30 s keepalive alarm (`oasis-bridge-keepalive`, sends `ping`). Handles runtime messages `oasis.status`, `oasis.reconnect`, `oasis.holdRate`, and republishes any `youtube.*` message to OASIS. Forwards commands to YouTube tabs. |
 | `content.js` | Content script (isolated world). Tracks the `<video>` element, sends `youtube.*` events, receives `oasis.command`, `oasis.settings`, `oasis.holdRate`; pauses and resumes video while OASIS's microphone is open (only a video it paused itself). |
-| `adskip.js` | Content script in the page's `MAIN` world. Clicks Skip when it unlocks, mild speed-up on unskippable ads, posts `oasis.adSkipped` to the page. Never seeks to the end of an ad. |
+| `adskip.js` | Content script in the page's `MAIN` world. Clicks Skip when it unlocks; on an unskippable ad it mutes it and raises the speed to 8x, then restores the saved rate and mute, posts `oasis.adSkipped` to the page. Never seeks to the end of an ad. |
 | `popup.html` / `popup.js` | Toolbar popup: CONNECTED / DISCONNECTED pill with reason, RETRY CONNECTION, hold-speed select. |
 | `manifest.json` | Permissions `storage`, `alarms`, `scripting`, `tabs`; hosts are YouTube domains plus `127.0.0.1` / `localhost` (port 17322). |
 
@@ -30,7 +30,7 @@ popup shows connection status and the hold-speed setting.
 ## Side Effects
 
 - Opens a local websocket to OASIS; fetches the token file from the extension folder.
-- Writes `holdPlaybackRate`, `oasisBridgeUrl`, `oasisLastForwarded` and `oasisLastForwardedAt` to `chrome.storage.local`.
+- Writes `holdPlaybackRate`, `oasisBridgeConnected`, `oasisBridgeError`, `oasisBridgeUrl`, `oasisLastForwarded` and `oasisLastForwardedAt` to `chrome.storage.local`; swaps the toolbar icon between `icons/iconNN.png` (connected) and `iconNN-off.png`.
 - Clicks Skip buttons, pauses, resumes and changes playback rate on YouTube tabs.
 
 ## Install
@@ -38,14 +38,14 @@ popup shows connection status and the hold-speed setting.
 1. Start OASIS (Browser Bridge **ENABLED**).
 2. Settings → **OPEN EXT FOLDER**
 3. Brave/Chrome → Extensions → Developer mode → **Load unpacked** → select that folder
-4. Badge should show **ON**; status popup should say **CONNECTED**
+4. The toolbar icon should be the coloured one (not the `-off` one); the popup should say **CONNECTED**
 
 ## Notes
 
 - Prefer the LocalAppData copy (OPEN EXT FOLDER), not OneDrive Debug output.
 - Reload the extension after OASIS updates.
 - Current page hooks include video playback signals; more site automations can be added later.
-- `fonts/` and `icons/` are assets only and are not documented.
+- `fonts/` (popup fonts), `icons/` (toolbar icons, on and off) and `APP_ICON.png` are assets only.
 
 ## Verification
 

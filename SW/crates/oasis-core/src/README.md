@@ -6,7 +6,7 @@ the next state plus *effects*; a host in `oasis-app` carries them out. Directly 
 small stand-alone rule modules; larger areas are subfolders.
 
 ## Interface
-`lib.rs` declares every module and re-exports `ButtonId`, `ButtonMask`, `Clock`, `CommandId`, `Instant`, `SystemClock`.
+`lib.rs` declares every module (its crate-doc table covers only some of them) and re-exports `ButtonId`, `ButtonMask`, `Clock`, `CommandId`, `Instant`, `SystemClock`.
 
 Subfolders:
 - [`actions/`](./actions/README.md) — what a button does, URL policy, app resolving
@@ -24,15 +24,16 @@ Files:
 | `capability.rs` | Optional features and `CapabilityState` (`Missing` carries a reason) |
 | `shortcut.rs` | `Chord::parse`, `ChordKey`, `plan` — shortcut text to OS-neutral keys and press/release timing |
 | `display_label.rs` | Button label fitted to the 14-character overlay pill, in capitals |
-| `battery.rs` | When to warn that the pad battery is low |
+| `battery.rs` | `LOW_PERCENT` (20), `low_battery_check`: when to warn that the pad battery is low |
 | `pad_connect.rs` | When to connect, back-off after failure, which pad to trust, latency probe rate |
 | `meetings.rs` | Which meeting is joinable, when to remind, how to say it |
 | `placement.rs` | Window-placement arithmetic: halves, screens, which window belongs to which launched item |
 | `quick_launch.rs` | Matching a spoken Quick Launch setup name |
+| `onboarding.rs` | Getting Started, the first-run guide: `Status`, `StepId`, `Surface`, `Blocked`, `Progress`, `Facts`, `Event`, `Made`, and `step(progress, event, facts)`, `fresh`, `dismissed`, `blocking`, `holds_keys`, `same_action`. The desktop app feeds it events, saves the result and draws it |
 | `startup.rs` | Launch arguments, when to hand over to the administrator copy, the scheduled-task definition |
 
 ## Invariants
-- Nothing in the crate touches a file, opens a socket or calls an OS API (`lib.rs` crate doc); time arrives as a parameter. The only clock read is `primitives.rs:SystemClock`, which the host chooses to use.
+- Nothing in the crate touches a file, opens a socket or calls an OS API (`lib.rs` crate doc); time arrives as a parameter. The only clock read is `primitives.rs:SystemClock` (a monotonic clock measured from a process-wide `OnceLock` origin), which the host chooses to use.
 - The crate has no dependencies (`Cargo.toml`).
 
 ## Side Effects

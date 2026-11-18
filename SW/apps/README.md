@@ -8,15 +8,15 @@ points with argument parsing, windows and event loops.
 
 | Folder | Binary | Status | Purpose |
 |---|---|---|---|
-| `oasis-cli/` | `oasis` | ✅ works | Run the pad chain, scan the pad, read a browser address, run one action, replay pad traffic |
-| `oasis-desktop/` | `oasis-desktop` | 🟡 first version | Tray icon and status window around the engine. No settings window or overlay yet |
+| `oasis-cli/` | `oasis` | works | Run the pad chain, scan the pad, read a browser address, run one action, replay pad traffic, check the PC, download models |
+| `oasis-desktop/` | `oasis-desktop` | beta | Tray, settings window, overlay, HUD, Quick Launch, first-run guide, accounts and updater around the engine (Windows) |
 
-What each does and does not do yet is in [`../docs/STATUS.md`](../docs/STATUS.md).
+Each app's README says what it does and does not do yet.
 
 ## Subdirectories & Boundaries
 
-- `oasis-cli`: [README](./oasis-cli/README.md) - the `oasis` headless harness (replay, run, do, address, ble, pc-check, download-models); source in [src](./oasis-cli/src/README.md).
-- `oasis-desktop`: [README](./oasis-desktop/README.md) - Tauri 2 tray app, window and overlay around `oasis-engine`. Parts: [src](./oasis-desktop/src/README.md), [web](./oasis-desktop/web/README.md) (Svelte page built into `ui/`), [capabilities](./oasis-desktop/capabilities/README.md), [examples](./oasis-desktop/examples/README.md).
+- `oasis-cli`: [README](./oasis-cli/README.md) - the `oasis` headless harness (replay, paths, status, pc-check, download-models, do, address, run, ble-scan, ble-listen); source in [src](./oasis-cli/src/README.md).
+- `oasis-desktop`: [README](./oasis-desktop/README.md) - Tauri 2 app (tray, settings window, overlay, HUD) around `oasis-engine`. Parts: [src](./oasis-desktop/src/README.md), [web](./oasis-desktop/web/README.md) (Svelte page built into `ui/`), [capabilities](./oasis-desktop/capabilities/README.md), [examples](./oasis-desktop/examples/README.md).
 
 ## Global Invariants
 

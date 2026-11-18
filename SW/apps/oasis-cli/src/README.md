@@ -12,15 +12,15 @@ Source of the `oasis` binary (`[[bin]] name = "oasis"`, `src/main.rs`): a headle
 
 ## Invariants
 - `replay`, `paths`, `status`, `ble-scan` change nothing on disk (`ble.rs` scan doc comment).
-- `run` is a harness: it uses the same engine as `oasis-desktop` and has no overlay, settings window or voice (`run.rs` module doc).
+- `run` is a harness: it uses the same engine as `oasis-desktop` and has no overlay or settings window; it only prints engine events (`run.rs` module doc).
 - `download-models` writes only into the folder given, never the app's real Models folder (`main.rs:download_models` doc).
-- Windows-only commands (`do`, `address`, `run`, `pc-check`) have `cfg` stubs elsewhere.
+- Windows-only commands (`do`, `address`, `run`, `pc-check`) have `cfg(not(windows))` stubs that print a message and fail.
 
 ## Side Effects
 - `do` runs a real action (keys, launching, URLs); `run` without `--dry-run` runs bound actions from the real `profiles.json`.
 - `ble-listen` and `run` open the pad's single BLE connection.
 - `download-models` makes network downloads and writes files.
-- `act.rs` writes to the security log.
+- `act.rs` passes the security log to the action backend, which writes to it.
 
 ## Verification
 - Run: `cargo test -p oasis-cli` (tests in `main.rs` cover replay gestures and telemetry/bad lines).
