@@ -3,79 +3,47 @@
 //! this enum is only how the code reads it, so a misspelt kind is a compile error, not a button
 //! that silently does nothing.
 
-/// Every kind the code produces or matches. `Unknown` is anything else, kept as text by its owner.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ActionKind {
-    Shortcut,
-    OpenUrl,
-    LaunchApp,
-    CloseApp,
-    CloseWindow,
-    WindowCommand,
-    WindowSplit,
-    WindowLayout,
-    RunScript,
-    AutoHotkey,
-    MouseClick,
-    PasteText,
-    OpenSettings,
-    JoinMeeting,
-    QuickLaunch,
-    LockPc,
-    Chime,
-    PlaySound,
-    Radio,
-    Brightness,
-    Theme,
-    Delay,
-    Automation,
-    Reminder,
-    CancelReminders,
-    SpotifyPlay,
-    SpotifyControl,
+/// Declares the kinds once: the enum, the list used to read text back, and `as_str`. A kind's
+/// stored text is its variant name, so one list cannot drift from the other two.
+macro_rules! kinds {
+    ($($(#[$doc:meta])* $kind:ident,)*) => {
+        /// Every kind the code produces or matches. `Unknown` is anything else, kept as text by its owner.
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum ActionKind {
+            $($(#[$doc])* $kind,)*
+            Unknown,
+        }
+
+        /// Every kind but `Unknown`, for reading text back.
+        const ALL: &[ActionKind] = &[$(ActionKind::$kind,)*];
+
+        impl ActionKind {
+            /// The text to store. Producers use this so they cannot drift from what consumers read.
+            /// `Unknown` is empty: it has no text of its own. `const` lets the menu lists in
+            /// oasis-settings be built from it.
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $(ActionKind::$kind => stringify!($kind),)*
+                    ActionKind::Unknown => "",
+                }
+            }
+        }
+    };
+}
+
+kinds! {
+    Shortcut, OpenUrl, LaunchApp, CloseApp, CloseWindow, WindowCommand, WindowSplit, WindowLayout,
+    RunScript, AutoHotkey, MouseClick, PasteText, OpenSettings, JoinMeeting, QuickLaunch, LockPc,
+    Chime, PlaySound, Radio, Brightness, Theme, Delay, Automation, Reminder, CancelReminders,
+    SpotifyPlay, SpotifyControl,
     /// Removed step kind; an old file's step is skipped, not failed.
     WaitRelease,
     /// Named only so the safety check can refuse them; nothing runs them.
     DeleteFile,
     MoveFile,
-    Unknown,
 }
 
 use ActionKind::*;
-
-/// Every kind but `Unknown`, for reading text back.
-const ALL: [ActionKind; 30] = [
-    Shortcut,
-    OpenUrl,
-    LaunchApp,
-    CloseApp,
-    CloseWindow,
-    WindowCommand,
-    WindowSplit,
-    WindowLayout,
-    RunScript,
-    AutoHotkey,
-    MouseClick,
-    PasteText,
-    OpenSettings,
-    JoinMeeting,
-    QuickLaunch,
-    LockPc,
-    Chime,
-    PlaySound,
-    Radio,
-    Brightness,
-    Theme,
-    Delay,
-    Automation,
-    Reminder,
-    CancelReminders,
-    SpotifyPlay,
-    SpotifyControl,
-    WaitRelease,
-    DeleteFile,
-    MoveFile,
-];
 
 impl ActionKind {
     /// Read a stored kind exactly, as the runner always did (C# compared exactly). Two old
@@ -94,46 +62,6 @@ impl ActionKind {
         ALL.iter().copied().find(|k| k.as_str().eq_ignore_ascii_case(text)).unwrap_or(Unknown)
     }
 
-    /// The text to store. Producers use this so they cannot drift from what consumers read.
-    /// `Unknown` is empty: it has no text of its own.
-    pub const fn as_str(self) -> &'static str {
-        // A match, not a table: a new variant without text is a compile error, and `const` lets
-        // the menu lists in oasis-settings be built from it.
-        match self {
-            Shortcut => "Shortcut",
-            OpenUrl => "OpenUrl",
-            LaunchApp => "LaunchApp",
-            CloseApp => "CloseApp",
-            CloseWindow => "CloseWindow",
-            WindowCommand => "WindowCommand",
-            WindowSplit => "WindowSplit",
-            WindowLayout => "WindowLayout",
-            RunScript => "RunScript",
-            AutoHotkey => "AutoHotkey",
-            MouseClick => "MouseClick",
-            PasteText => "PasteText",
-            OpenSettings => "OpenSettings",
-            JoinMeeting => "JoinMeeting",
-            QuickLaunch => "QuickLaunch",
-            LockPc => "LockPc",
-            Chime => "Chime",
-            PlaySound => "PlaySound",
-            Radio => "Radio",
-            Brightness => "Brightness",
-            Theme => "Theme",
-            Delay => "Delay",
-            Automation => "Automation",
-            Reminder => "Reminder",
-            CancelReminders => "CancelReminders",
-            SpotifyPlay => "SpotifyPlay",
-            SpotifyControl => "SpotifyControl",
-            WaitRelease => "WaitRelease",
-            DeleteFile => "DeleteFile",
-            MoveFile => "MoveFile",
-            Unknown => "",
-        }
-    }
-
     /// Any kind the Spotify lane takes: the text starts with `Spotify`, known or not.
     pub fn is_spotify_text(text: &str) -> bool {
         text.starts_with("Spotify")
@@ -146,7 +74,7 @@ mod tests {
 
     #[test]
     fn every_kind_round_trips() {
-        for kind in ALL {
+        for &kind in ALL {
             let name = kind.as_str();
             assert!(!name.is_empty());
             assert_eq!(ActionKind::of(name), kind);
