@@ -282,6 +282,10 @@ struct Job {
     what: String,
     /// The "allow RunScript actions" setting when this press happened.
     allow_run_script: bool,
+    /// Work to do on the worker before the action, in this job's place in the queue: a dictation's
+    /// cleanup and polish (seconds), which must not hold up the engine loop. It returns the text to
+    /// paste, or `None` when nothing is to be pasted.
+    prepare: Option<Box<dyn FnOnce() -> Option<String> + Send>>,
 }
 
 // ---- the handle ------------------------------------------------------------------------------
@@ -315,7 +319,7 @@ impl EngineHandle {
             return Err("This button has nothing to run yet.".into());
         }
         let what = format!("{} {}", action.kind, action.value);
-        let job = Job { action, button: button as i32, what, allow_run_script: settings.allow_run_script_actions };
+        let job = Job { action, button: button as i32, what, allow_run_script: settings.allow_run_script_actions, prepare: None };
         self.jobs.as_ref().ok_or("OASIS is stopping.")?.send(job).map_err(|_| "OASIS is stopping.".to_string())
     }
 
@@ -632,7 +636,7 @@ fn run_loop<T: PadTransport>(
             if verified && shared.live.load(Ordering::SeqCst) {
                 if let Some(setup) = oasis_settings::quick_launch::startup_setup(&settings) {
                     let action = ButtonAction { kind: "QuickLaunch".into(), value: setup.id, steps: vec![] };
-                    let _ = jobs.send(Job { action, button: -1, what: "start-up setup".into(), allow_run_script: false });
+                    let _ = jobs.send(Job { action, button: -1, what: "start-up setup".into(), allow_run_script: false, prepare: None });
                 }
             }
         }
@@ -1183,7 +1187,7 @@ const CONFIRM_TIMEOUT: Duration = Duration::from_secs(30);
 
 /// What the handlers of a spoken phrase need.
 struct SpokenContext<'a> {
-    shared: &'a Shared,
+    shared: &'a Arc<Shared>,
     settings: &'a Settings,
     verified: bool,
     jobs: &'a Sender<Job>,
@@ -1223,7 +1227,7 @@ fn handle_heard(
     let phrase = gate::prepare(&heard.text);
     if !in_text_field && gate::is_prose_about_writing(&phrase) {
         let style = dictation_style(foreground);
-        type_dictation(ctx.shared, ctx.settings, ctx.verified, ctx.jobs, &heard, style, true);
+        type_dictation(ctx, heard, style, true);
         return None;
     }
     let spoken = SpokenPhrase { transcript: &heard.text, phrase: &phrase, in_text_field };
@@ -1232,7 +1236,7 @@ fn handle_heard(
         // Not a command after all: in a text field, it was meant to be typed.
         Spoken::NotACommand => {
             let style = dictation_style(foreground);
-            type_dictation(ctx.shared, ctx.settings, ctx.verified, ctx.jobs, &heard, style, !in_text_field);
+            type_dictation(ctx, heard, style, !in_text_field);
             None
         }
     }
@@ -1547,7 +1551,7 @@ fn fire_due_reminders(shared: &Shared, jobs: &Sender<Job>) {
         shared.emit(EngineEvent::Reminder { title, body });
         if shared.live.load(Ordering::SeqCst) {
             let action = ButtonAction { kind: "Chime".into(), value: item.chimes().to_string(), steps: vec![] };
-            let _ = jobs.send(Job { action, button: -1, what: "sound the reminder".into(), allow_run_script: false });
+            let _ = jobs.send(Job { action, button: -1, what: "sound the reminder".into(), allow_run_script: false, prepare: None });
         }
     }
 }
@@ -1571,7 +1575,7 @@ fn run_voice_action(
     });
     if runs {
         let what = format!("{} {}", action.kind, action.value);
-        let _ = jobs.send(Job { action: action.clone(), button: -1, what, allow_run_script: false });
+        let _ = jobs.send(Job { action: action.clone(), button: -1, what, allow_run_script: false, prepare: None });
     }
 }
 
@@ -1587,7 +1591,21 @@ fn dictation_style(foreground: &mut dyn ForegroundProbe) -> Style {
 
 /// `keep_on_clipboard`: no text field was found, so the paste may land nowhere; the text then stays on
 /// the clipboard for the user to paste (the paste puts the old clipboard back, which is this text).
-fn type_dictation(shared: &Shared, settings: &Settings, verified: bool, jobs: &Sender<Job>, heard: &Heard, style: Style, keep_on_clipboard: bool) {
+///
+/// Cleanup and the S1-mini polish can take seconds, so they run on the action worker, in this job's
+/// place in the queue: the engine loop keeps reading the pad, and a press or command that comes
+/// meanwhile still runs after this text is pasted.
+fn type_dictation(ctx: &SpokenContext<'_>, heard: Heard, style: Style, keep_on_clipboard: bool) {
+    let (shared, settings, verified) = (Arc::clone(ctx.shared), ctx.settings.clone(), ctx.verified);
+    let allow_run_script = settings.allow_run_script_actions;
+    let prepare = move || dictation_text(&shared, &settings, verified, &heard, style, keep_on_clipboard);
+    let action = ButtonAction { kind: "PasteText".into(), value: String::new(), steps: vec![] };
+    let what = "type what was said".to_string();
+    let _ = ctx.jobs.send(Job { action, button: -1, what, allow_run_script, prepare: Some(Box::new(prepare)) });
+}
+
+/// A dictation cleaned, polished, kept and shown; the text to paste, or `None` when it is only shown.
+fn dictation_text(shared: &Shared, settings: &Settings, verified: bool, heard: &Heard, style: Style, keep_on_clipboard: bool) -> Option<String> {
     let raw = heard.text.as_str();
     let mut trace = Vec::new();
     let text = clean_dictation(settings, raw, style, &heard.paragraphs, &mut trace);
@@ -1609,7 +1627,7 @@ fn type_dictation(shared: &Shared, settings: &Settings, verified: bool, jobs: &S
         let _ = oasis_win::clipboard::set_text(&typed);
     }
     write_dictation_trace(shared, style, raw, &trace, &typed);
-    paste_typed(shared, settings, verified, jobs, &text, typed);
+    show_typed(shared, settings, verified, &text).then_some(typed)
 }
 
 /// One block per dictation in `dictation-trace.log`: the speech model's raw text, the text after
@@ -1656,18 +1674,26 @@ fn cue(settings: &Settings, wav: &'static [u8]) {
 /// Type `value` where the cursor is, and show `shown` in the activity list. In preview mode, or
 /// with a bad signature, it is only shown.
 fn paste_typed(shared: &Shared, settings: &Settings, verified: bool, jobs: &Sender<Job>, shown: &str, value: String) {
+    if show_typed(shared, settings, verified, shown) {
+        let action = ButtonAction { kind: "PasteText".into(), value, steps: vec![] };
+        let allow_run_script = settings.allow_run_script_actions;
+        let what = "type what was said".to_string();
+        let _ = jobs.send(Job { action, button: -1, what, allow_run_script, prepare: None });
+    }
+}
+
+/// Shows `shown` in the activity list and, when it will be typed, plays the end cue. True when it
+/// is to be typed (actions on, signature good); nothing is shown for an empty text.
+fn show_typed(shared: &Shared, settings: &Settings, verified: bool, shown: &str) -> bool {
     if shown.is_empty() {
-        return;
+        return false;
     }
     let runs = verified && shared.live.load(Ordering::SeqCst);
     shared.emit(EngineEvent::Transcript { text: shown.to_string(), typed: runs });
     if runs {
         cue(settings, VOICE_OUT);
-        let action = ButtonAction { kind: "PasteText".into(), value, steps: vec![] };
-        let allow_run_script = settings.allow_run_script_actions;
-        let what = "type what was said".to_string();
-        let _ = jobs.send(Job { action, button: -1, what, allow_run_script });
     }
+    runs
 }
 
 /// Dictation as it will be typed: spoken punctuation, numbers, corrections, fillers, the user's own
@@ -1882,7 +1908,7 @@ fn dispatch(
     if runs {
         let what = format!("{} {}", press.kind, press.value);
         let allow_run_script = settings.allow_run_script_actions;
-        let _ = jobs.send(Job { action, button, what, allow_run_script });
+        let _ = jobs.send(Job { action, button, what, allow_run_script, prepare: None });
     }
 }
 
@@ -1958,8 +1984,14 @@ fn spawn_worker(
         .spawn(move || {
             // One action at a time, in order. A long step blocks only this thread; the engine
             // keeps reading the pad.
-            for job in inbox {
+            for mut job in inbox {
                 let _busy = crate::activity::work();
+                if let Some(prepare) = job.prepare.take() {
+                    match prepare() {
+                        Some(text) => job.action.value = text,
+                        None => continue,
+                    }
+                }
                 if handle_reminder_action(&shared, &job.action) {
                     continue;
                 }
