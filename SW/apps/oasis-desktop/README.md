@@ -129,7 +129,7 @@ then reads and writes only that copy.
 
 ## Interface
 
-Child contracts: [src/](./src/README.md) (Rust, full command list), [web/](./web/README.md) (Svelte page), [ui/](./ui/README.md) (built and hand-written pages), [capabilities/](./capabilities/README.md), [examples/](./examples/README.md).
+Child contracts: [src/](./src/README.md) (Rust, full command list), [web/](./web/README.md) (Svelte page), [ui/](./UI_PAGES.md) (built and hand-written pages; the notes sit outside `ui/` so the installer does not pack them), [capabilities/](./capabilities/README.md), [examples/](./examples/README.md).
 
 | File | Contents |
 |---|---|
