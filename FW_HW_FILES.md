@@ -34,4 +34,4 @@ Build: `cd FW && pio run`, flash with `pio run -t upload`.
 | `3D/` | Extra 3D preview files (`.usdz`, `.mtl`) |
 | `README.md` | Parts list, pin map, manufacturing notes |
 
-Pin map: GPIO3 button 0, GPIO4 button 1, GPIO5 button 2, GPIO6/7 OLED I2C, GPIO2 battery divider.
+Pin map: GPIO3 button 0, GPIO4 button 1, GPIO5 button 2, GPIO6/7 OLED I2C (reserved; OLED not fitted in this version to save battery), GPIO2 battery divider.
