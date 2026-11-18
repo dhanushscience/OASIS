@@ -288,13 +288,30 @@ struct Job {
     prepare: Option<Box<dyn FnOnce() -> Option<String> + Send>>,
 }
 
+/// Where jobs go: the ordered lane (one at a time, so "open Word" finishes before the paste into
+/// it), or a second lane for jobs that do not care which window is in front and that nothing
+/// queued later depends on, so a slow "open app" does not hold up a volume key or a timer.
+#[derive(Clone)]
+struct Jobs {
+    ordered: Sender<Job>,
+    free: Sender<Job>,
+}
+
+impl Jobs {
+    fn send(&self, job: Job) -> Result<(), mpsc::SendError<Job>> {
+        // A job with `prepare` pastes dictation, so it always stays in order.
+        let lane = if job.prepare.is_none() && oasis_core::actions::is_focus_free(&job.action) { &self.free } else { &self.ordered };
+        lane.send(job)
+    }
+}
+
 // ---- the handle ------------------------------------------------------------------------------
 
 pub struct EngineHandle {
     shared: Arc<Shared>,
     thread: Option<JoinHandle<()>>,
     /// Lets "Try it" start a button's action. Dropped first on stop, or the worker never ends.
-    jobs: Option<Sender<Job>>,
+    jobs: Option<Jobs>,
 }
 
 impl EngineHandle {
@@ -482,12 +499,25 @@ where
         parts.transport,
         TrustedDevice::load(config.paths.trusted_device()),
     );
-    let (jobs, inbox) = mpsc::channel::<Job>();
+    let (ordered_tx, inbox) = mpsc::channel::<Job>();
+    let (free_tx, free_inbox) = mpsc::channel::<Job>();
+    let jobs = Jobs { ordered: ordered_tx, free: free_tx };
     let try_jobs = jobs.clone();
 
+    // Both workers build their backend from the same factory; the lock is held only for that call.
+    let make_backend = Arc::new(Mutex::new(parts.make_backend));
     let worker = spawn_worker(
+        "oasis-actions",
         inbox,
-        parts.make_backend,
+        Arc::clone(&make_backend),
+        Arc::clone(&shared),
+        config.paths.security_log(),
+        parts.quick_launch.clone(),
+    );
+    let free_worker = spawn_worker(
+        "oasis-actions-free",
+        free_inbox,
+        make_backend,
         Arc::clone(&shared),
         config.paths.security_log(),
         parts.quick_launch,
@@ -516,6 +546,7 @@ where
             );
             drop(jobs); // ends the worker
             let _ = worker.join();
+            let _ = free_worker.join();
             loop_shared.update(|s| s.running = false);
             loop_shared.emit(EngineEvent::Stopped);
         })
@@ -563,7 +594,7 @@ fn run_loop<T: PadTransport>(
     shared: &Arc<Shared>,
     mut connector: PadConnector<T>,
     mut foreground: Box<dyn ForegroundProbe>,
-    jobs: &Sender<Job>,
+    jobs: &Jobs,
     extras: LoopExtras,
 ) {
     let LoopExtras { bridge_config, voice_parts, mut startup_setup_at, buttons } = extras;
@@ -1190,7 +1221,7 @@ struct SpokenContext<'a> {
     shared: &'a Arc<Shared>,
     settings: &'a Settings,
     verified: bool,
-    jobs: &'a Sender<Job>,
+    jobs: &'a Jobs,
     watch_token: &'a str,
 }
 
@@ -1543,7 +1574,7 @@ fn handle_reminder_action(shared: &Shared, action: &ButtonAction) -> bool {
 }
 
 /// Everything that has come due: shown, and (when actions are on) sounded.
-fn fire_due_reminders(shared: &Shared, jobs: &Sender<Job>) {
+fn fire_due_reminders(shared: &Shared, jobs: &Jobs) {
     let now = local_now().unix;
     let due = shared.reminders.lock().unwrap_or_else(|e| e.into_inner()).take_due(now);
     for item in due {
@@ -1559,7 +1590,7 @@ fn fire_due_reminders(shared: &Shared, jobs: &Sender<Job>) {
 /// Start a spoken command's action. It never runs a script, whatever the setting says.
 fn run_voice_action(
     shared: &Shared,
-    jobs: &Sender<Job>,
+    jobs: &Jobs,
     action: &ButtonAction,
     label: &str,
     heard: &str,
@@ -1673,7 +1704,7 @@ fn cue(settings: &Settings, wav: &'static [u8]) {
 
 /// Type `value` where the cursor is, and show `shown` in the activity list. In preview mode, or
 /// with a bad signature, it is only shown.
-fn paste_typed(shared: &Shared, settings: &Settings, verified: bool, jobs: &Sender<Job>, shown: &str, value: String) {
+fn paste_typed(shared: &Shared, settings: &Settings, verified: bool, jobs: &Jobs, shown: &str, value: String) {
     if show_typed(shared, settings, verified, shown) {
         let action = ButtonAction { kind: "PasteText".into(), value, steps: vec![] };
         let allow_run_script = settings.allow_run_script_actions;
@@ -1887,7 +1918,7 @@ fn dispatch(
     settings: &Settings,
     verified: bool,
     foreground: &mut dyn ForegroundProbe,
-    jobs: &Sender<Job>,
+    jobs: &Jobs,
     gesture: Gesture<'_>,
 ) {
     let Gesture { button, claim, watch_token } = gesture;
@@ -1973,14 +2004,15 @@ fn plan(
 // ---- the worker ------------------------------------------------------------------------------
 
 fn spawn_worker(
+    name: &str,
     inbox: Receiver<Job>,
-    make_backend: BackendFactory,
+    make_backend: Arc<Mutex<BackendFactory>>,
     shared: Arc<Shared>,
     security_log: std::path::PathBuf,
     quick_launch: Option<crate::quick_launch::QuickLaunchParts>,
 ) -> JoinHandle<()> {
     thread::Builder::new()
-        .name("oasis-actions".into())
+        .name(name.into())
         .spawn(move || {
             // One action at a time, in order. A long step blocks only this thread; the engine
             // keeps reading the pad.
@@ -1999,7 +2031,7 @@ fn spawn_worker(
                     run_spotify(&shared, &job.action, &job.what);
                     continue;
                 }
-                let mut backend = make_backend(BackendContext {
+                let mut backend = (make_backend.lock().unwrap_or_else(|e| e.into_inner()))(BackendContext {
                     security_log: SecurityLog::at(security_log.clone()),
                     allow_run_script: job.allow_run_script,
                 });

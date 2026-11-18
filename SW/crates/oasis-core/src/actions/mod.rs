@@ -69,6 +69,22 @@ pub struct ButtonAction {
     pub steps: Vec<ActionStep>,
 }
 
+/// True when the action does not depend on which window is in front and nothing queued after it
+/// can depend on it, so it may run beside a slow "open app" instead of waiting behind it. Kept
+/// narrow on purpose: anything unknown, and every automation, stays in the ordered lane.
+pub fn is_focus_free(action: &ButtonAction) -> bool {
+    use crate::shortcut::ChordKey::*;
+    match action.kind.as_str() {
+        "Reminder" | "CancelReminders" | "Chime" | "PlaySound" | "Radio" | "Brightness" => true,
+        k if k.starts_with("Spotify") => true,
+        "Shortcut" => Chord::parse(&action.value).is_ok_and(|c| {
+            !c.keys.is_empty()
+                && c.keys.iter().all(|k| matches!(k, VolumeUp | VolumeDown | VolumeMute | PlayPause | NextTrack | PrevTrack | MediaStop))
+        }),
+        _ => false,
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MouseButton {
     Left,
@@ -165,6 +181,17 @@ pub trait ActionBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_window_independent_actions_get_the_second_lane() {
+        let a = |kind: &str, value: &str| ButtonAction { kind: kind.into(), value: value.into(), steps: vec![] };
+        for free in [("Shortcut", "VolumeUp"), ("Shortcut", "MediaPlayPause"), ("Shortcut", "Mute"), ("SpotifyPlay", ""), ("Reminder", "timer|1|"), ("CancelReminders", "all"), ("Chime", "1"), ("Radio", "x"), ("Brightness", "50")] {
+            assert!(is_focus_free(&a(free.0, free.1)), "{free:?}");
+        }
+        for ordered in [("Shortcut", "Ctrl+V"), ("Shortcut", "Ctrl+VolumeUp"), ("Shortcut", ""), ("LaunchApp", "word"), ("PasteText", "hi"), ("Automation", ""), ("Delay", "5")] {
+            assert!(!is_focus_free(&a(ordered.0, ordered.1)), "{ordered:?}");
+        }
+    }
 
     #[test]
     fn mouse_clicks_parse_like_the_csharp_executor() {
