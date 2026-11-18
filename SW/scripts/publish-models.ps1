@@ -1,6 +1,6 @@
 # Publish the voice model files (docs/VOICE_MODEL_SETUP.md section 4): copy each under its release name,
 # hash it, write the manifest the app is built with (and models.json, the same list), and (with -Publish) upload them to a models
-# release in the public releases repo. That release is a pre-release, so it can never be "Latest"
+# release in the main repo. That release is a pre-release, so it can never be "Latest"
 # (--latest=false alone is ignored while it is the newest release): the app updater reads
 # releases/latest (docs/UPDATES.md).
 #
@@ -13,7 +13,7 @@ param(
     [Parameter(Mandatory = $true)][string]$LlamaZip,
     [Parameter(Mandatory = $true)][string]$LlamaLicense,
     [string]$Tag = "models-2026.11",
-    [string]$Repo = "dhanushscience/OASIS-releases",
+    [string]$Repo = "dhanushscience/OASIS",
     [string]$Stage = "$env:TEMP\oasis-models-stage",
     [switch]$Publish
 )
