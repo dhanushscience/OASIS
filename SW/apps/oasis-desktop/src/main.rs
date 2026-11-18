@@ -23,7 +23,7 @@ mod update;
 
 use std::sync::Mutex;
 
-use oasis_core::actions::{ActionStep, Next};
+use oasis_core::actions::{ActionKind, ActionStep, Next};
 use oasis_engine::{EngineHandle, EngineStatus};
 use oasis_settings::edit::{ButtonEdit, SetEdit};
 use serde::{Deserialize, Serialize};
@@ -1552,8 +1552,8 @@ fn ensure_profiles(paths: &oasis_platform::paths::OasisPaths) -> bool {
         steps: Vec::new(),
     };
     // Each is tried on its own: a default that is refused must not cost the profile itself.
-    let _ = settings.set_button(0, 0, 0, button("Shortcut", "", "Voice"));
-    let _ = settings.set_button(0, 0, 2, button("Shortcut", "Win+D", "Desktop"));
+    let _ = settings.set_button(0, 0, 0, button(ActionKind::Shortcut.as_str(), "", "Voice"));
+    let _ = settings.set_button(0, 0, 2, button(ActionKind::Shortcut.as_str(), "Win+D", "Desktop"));
     let _ = settings.set_input(&oasis_settings::input::InputSettings {
         keyboard: true,
         ..Default::default()

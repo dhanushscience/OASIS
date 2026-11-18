@@ -18,7 +18,7 @@ use oasis_core::voice::VoiceEvent;
 use oasis_core::speech::pipeline as cleanup_pipeline;
 use oasis_core::speech::style::Style;
 use oasis_core::speech::{CleanupContext, CleanupRequest, GlossaryEntry};
-use oasis_core::actions::{run_action, ActionBackend, ActionOutcome, ButtonAction};
+use oasis_core::actions::{run_action, ActionBackend, ActionKind, ActionOutcome, ButtonAction};
 use oasis_core::input::{ArbiterContext, ArbiterEffect, GestureClaimId, LabelPolicy, PadEvent};
 use oasis_core::matching::ForegroundContext;
 use oasis_core::Instant;
@@ -754,7 +754,7 @@ fn run_loop<T: PadTransport + 'static>(
             startup_setup_at = None;
             if verified && shared.live.load(Ordering::SeqCst) {
                 if let Some(setup) = oasis_settings::quick_launch::startup_setup(&settings) {
-                    let action = ButtonAction { kind: "QuickLaunch".into(), value: setup.id, steps: vec![] };
+                    let action = ButtonAction { kind: ActionKind::QuickLaunch.as_str().into(), value: setup.id, steps: vec![] };
                     let _ = jobs.send(Job { action, button: -1, what: "start-up setup".into(), allow_run_script: false, prepare: None });
                 }
             }
@@ -1438,7 +1438,7 @@ fn starts_a_shell(action: &ButtonAction) -> bool {
     #[cfg(windows)]
     {
         steps_of(action).iter().any(|(kind, value)| {
-            kind.eq_ignore_ascii_case("LaunchApp")
+            ActionKind::of_ignore_case(kind) == ActionKind::LaunchApp
                 && oasis_platform::windows::app_discovery::launch_target(value)
                     .is_some_and(|t| oasis_core::voice::command::safety::names_a_shell(&t))
         })
@@ -1467,8 +1467,8 @@ fn local_now() -> LocalTime {
 fn handle_reminder_action(shared: &Shared, action: &ButtonAction) -> bool {
     let now = local_now();
     let note = |text: String| shared.emit(EngineEvent::Note { text });
-    match action.kind.as_str() {
-        "Reminder" => {
+    match action.kind() {
+        ActionKind::Reminder => {
             let mut parts = action.value.splitn(3, '|');
             let (kind, due, label) = (parts.next().unwrap_or(""), parts.next().and_then(|d| d.parse::<i64>().ok()), parts.next().unwrap_or(""));
             match due.filter(|d| *d > 0 && matches!(kind, "alarm" | "timer" | "reminder")) {
@@ -1480,7 +1480,7 @@ fn handle_reminder_action(shared: &Shared, action: &ButtonAction) -> bool {
             }
             true
         }
-        "CancelReminders" => {
+        ActionKind::CancelReminders => {
             let removed = shared.reminders.lock().unwrap_or_else(|e| e.into_inner()).cancel(&action.value);
             note(match removed {
                 0 => "Nothing to cancel.".into(),
@@ -1501,7 +1501,7 @@ fn fire_due_reminders(shared: &Shared, jobs: &Jobs) {
         let (title, body) = item.message(now);
         shared.emit(EngineEvent::Reminder { title, body });
         if shared.live.load(Ordering::SeqCst) {
-            let action = ButtonAction { kind: "Chime".into(), value: item.chimes().to_string(), steps: vec![] };
+            let action = ButtonAction { kind: ActionKind::Chime.as_str().into(), value: item.chimes().to_string(), steps: vec![] };
             let _ = jobs.send(Job { action, button: -1, what: "sound the reminder".into(), allow_run_script: false, prepare: None });
         }
     }
@@ -1550,7 +1550,7 @@ fn type_dictation(ctx: &SpokenContext<'_>, heard: Heard, style: Style, keep_on_c
     let (shared, settings, verified) = (Arc::clone(ctx.shared), ctx.settings.clone(), ctx.verified);
     let allow_run_script = settings.allow_run_script_actions;
     let prepare = move || dictation_text(&shared, &settings, verified, &heard, style, keep_on_clipboard);
-    let action = ButtonAction { kind: "PasteText".into(), value: String::new(), steps: vec![] };
+    let action = ButtonAction { kind: ActionKind::PasteText.as_str().into(), value: String::new(), steps: vec![] };
     let what = "type what was said".to_string();
     let _ = ctx.jobs.send(Job { action, button: -1, what, allow_run_script, prepare: Some(Box::new(prepare)) });
 }
@@ -1599,9 +1599,9 @@ fn write_dictation_trace(shared: &Shared, style: Style, raw: &str, trace: &[(Str
 
 /// What a close command would shut: the named app, or the window in front (`front`) when none is named.
 fn close_target(action: &ButtonAction, front: &str) -> Option<String> {
-    let named = if action.kind.eq_ignore_ascii_case("CloseApp") {
+    let named = if ActionKind::of_ignore_case(&action.kind) == ActionKind::CloseApp {
         action.value.trim()
-    } else if action.kind.eq_ignore_ascii_case("WindowCommand") {
+    } else if ActionKind::of_ignore_case(&action.kind) == ActionKind::WindowCommand {
         action.value.to_lowercase().strip_prefix("close|").map(|_| action.value[6..].trim())?
     } else {
         return None;
@@ -1627,7 +1627,7 @@ fn cue(settings: &Settings, wav: &'static [u8]) {
 /// with a bad signature, it is only shown.
 fn paste_typed(shared: &Shared, settings: &Settings, verified: bool, jobs: &Jobs, shown: &str, value: String) {
     if show_typed(shared, settings, verified, shown) {
-        let action = ButtonAction { kind: "PasteText".into(), value, steps: vec![] };
+        let action = ButtonAction { kind: ActionKind::PasteText.as_str().into(), value, steps: vec![] };
         let allow_run_script = settings.allow_run_script_actions;
         let what = "type what was said".to_string();
         let _ = jobs.send(Job { action, button: -1, what, allow_run_script, prepare: None });
@@ -1782,7 +1782,7 @@ fn report_telemetry(shared: &Shared, link: &PadLink) {
 
 /// Whether a button has anything to run (a blank button shows a press and does nothing).
 fn is_runnable(action: &ButtonAction) -> bool {
-    matches!(action.kind.as_str(), "Automation" | "JoinMeeting") || !action.value.trim().is_empty()
+    matches!(action.kind(), ActionKind::Automation | ActionKind::JoinMeeting) || !action.value.trim().is_empty()
 }
 
 /// The active profile's name and the three button labels to show, if labels are wanted for it
@@ -1881,11 +1881,11 @@ fn plan(
                 button: number,
                 profile: "(hold)".into(),
                 config: "show desktop".into(),
-                kind: "Shortcut".into(),
+                kind: ActionKind::Shortcut.as_str().into(),
                 value: "Win+D".into(),
                 runs: false,
             },
-            ButtonAction { kind: "Shortcut".into(), value: "Win+D".into(), steps: vec![] },
+            ButtonAction { kind: ActionKind::Shortcut.as_str().into(), value: "Win+D".into(), steps: vec![] },
         )),
         GestureClaimId::BoundTap => {
             let context = ForegroundContext::from(info?);
@@ -1912,11 +1912,11 @@ fn plan(
                     button: number,
                     profile: "(YouTube)".into(),
                     config: "volume".into(),
-                    kind: "Shortcut".into(),
+                    kind: ActionKind::Shortcut.as_str().into(),
                     value: key.into(),
                     runs: false,
                 },
-                ButtonAction { kind: "Shortcut".into(), value: key.into(), steps: vec![] },
+                ButtonAction { kind: ActionKind::Shortcut.as_str().into(), value: key.into(), steps: vec![] },
             ))
         }
         _ => None,
@@ -1949,7 +1949,7 @@ fn spawn_worker(
                 if handle_reminder_action(&shared, &job.action) {
                     continue;
                 }
-                if job.action.kind.starts_with("Spotify") {
+                if ActionKind::is_spotify_text(&job.action.kind) {
                     run_spotify(&shared, &job.action, &job.what);
                     continue;
                 }
@@ -1957,7 +1957,7 @@ fn spawn_worker(
                     security_log: SecurityLog::at(security_log.clone()),
                     allow_run_script: job.allow_run_script,
                 });
-                if job.action.kind == "QuickLaunch" {
+                if job.action.kind() == ActionKind::QuickLaunch {
                     run_quick_launch(&shared, backend.as_mut(), &job.action.value, quick_launch.as_ref());
                     continue;
                 }
@@ -2026,7 +2026,7 @@ impl ActionBackend for JoinAware<'_> {
         self.problem.take().or_else(|| self.inner.take_problem())
     }
     fn window_action(&mut self, kind: &str, value: &str) -> bool {
-        if kind != "WindowLayout" {
+        if ActionKind::of(kind) != ActionKind::WindowLayout {
             return self.inner.window_action(kind, value);
         }
         match run_layout(self.shared, value, &mut |id| self.quick_launch(id)) {
@@ -2145,7 +2145,7 @@ fn run_quick_launch(
     let (action, skipped) = oasis_settings::quick_launch::to_action(&setup);
     let (mut opened, mut failed) = (0usize, skipped);
     for step in &action.steps {
-        if step.kind == "Delay" {
+        if step.kind() == ActionKind::Delay {
             backend.pause(Duration::from_millis(step.value.parse().unwrap_or(0)));
             continue;
         }

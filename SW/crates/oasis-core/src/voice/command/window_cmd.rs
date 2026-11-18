@@ -11,6 +11,8 @@
 //! only, so "maximize the plan for next year" is not a window command. "close <app>" is not here:
 //! that closes the whole app and is the router's `CloseApp`, which asks first.
 
+use crate::actions::ActionKind;
+
 /// `(kind, value, label)` for a window phrase, or `None` when the phrase is something else.
 pub fn plan(normalized: &str) -> Option<(&'static str, String, String)> {
     let text = normalized.strip_prefix("please ").unwrap_or(normalized).trim();
@@ -78,7 +80,7 @@ fn layout(text: &str) -> Option<(&'static str, String, String)> {
     }
     let name = if before.is_empty() { after.join(" ") } else { before.join(" ") };
     let label = if verb == "save" { "SAVE LAYOUT" } else { "RESTORE LAYOUT" };
-    Some(("WindowLayout", format!("{verb}|{name}"), label.into()))
+    Some((ActionKind::WindowLayout.as_str(), format!("{verb}|{name}"), label.into()))
 }
 
 /// "put chrome and vs code side by side", "split chrome and notepad".
@@ -101,22 +103,22 @@ fn split(text: &str) -> Option<(&'static str, String, String)> {
         return None;
     }
     let label = format!("SPLIT {}", apps.join(" + ").to_uppercase());
-    Some(("WindowSplit", apps.join(","), label))
+    Some((ActionKind::WindowSplit.as_str(), apps.join(","), label))
 }
 
 /// One window: a verb on the window in front or on a named app.
 fn single(text: &str) -> Option<(&'static str, String, String)> {
     // Close: only "this window". An app by name is `CloseApp`, which asks before it closes everything.
     if matches!(text, "close this window" | "close the window" | "close window" | "close current window" | "close this") {
-        return Some(("WindowCommand", "close|".into(), "CLOSE WINDOW".into()));
+        return Some((ActionKind::WindowCommand.as_str(), "close|".into(), "CLOSE WINDOW".into()));
     }
     for (said, verb) in [("maximize ", "maximize"), ("maximise ", "maximize"), ("minimize ", "minimize"), ("minimise ", "minimize"), ("restore ", "restore")] {
         if let Some(rest) = text.strip_prefix(said) {
             let who = named(rest)?;
-            return Some(("WindowCommand", format!("{verb}|{who}"), label(verb, &who)));
+            return Some((ActionKind::WindowCommand.as_str(), format!("{verb}|{who}"), label(verb, &who)));
         }
         if text == said.trim_end() {
-            return Some(("WindowCommand", format!("{verb}|"), label(verb, "")));
+            return Some((ActionKind::WindowCommand.as_str(), format!("{verb}|"), label(verb, "")));
         }
     }
     // "move chrome to the other screen", "send this to screen 2", "put it on the second monitor"
@@ -126,11 +128,11 @@ fn single(text: &str) -> Option<(&'static str, String, String)> {
             let Some((who, place)) = rest.split_once(joiner) else { continue };
             if let Some(screen) = screen_of(place) {
                 let Some(who) = named(who) else { continue };
-                return Some(("WindowCommand", format!("{screen}|{who}"), label("move", &who)));
+                return Some((ActionKind::WindowCommand.as_str(), format!("{screen}|{who}"), label("move", &who)));
             }
             if let Some(side) = side_of(place) {
                 let Some(who) = named(who) else { continue };
-                return Some(("WindowCommand", format!("{side}|{who}"), label("snap", &who)));
+                return Some((ActionKind::WindowCommand.as_str(), format!("{side}|{who}"), label("snap", &who)));
             }
         }
     }
@@ -141,12 +143,12 @@ fn single(text: &str) -> Option<(&'static str, String, String)> {
             if let Some((who, place)) = rest.rsplit_once(joiner) {
                 if let Some(side) = side_of(place) {
                     let Some(who) = named(who) else { continue };
-                    return Some(("WindowCommand", format!("{side}|{who}"), label("snap", &who)));
+                    return Some((ActionKind::WindowCommand.as_str(), format!("{side}|{who}"), label("snap", &who)));
                 }
             }
         }
         if let Some(side) = side_of(rest) {
-            return Some(("WindowCommand", format!("{side}|"), label("snap", "")));
+            return Some((ActionKind::WindowCommand.as_str(), format!("{side}|"), label("snap", "")));
         }
     }
     None

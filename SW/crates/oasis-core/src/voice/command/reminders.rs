@@ -9,6 +9,7 @@
 //! Known gap: a time like "7:30" arrives as "7 30" (the router drops punctuation), which is read
 //! the same way. "Tomorrow", dates and "1.5 hours" are not understood; the phrase is then left alone.
 
+use crate::actions::ActionKind;
 use crate::speech::numbers;
 
 /// The moment a phrase was said, as the clock on the wall shows it.
@@ -33,11 +34,11 @@ pub fn plan(normalized: &str, now: LocalTime) -> Option<(&'static str, String, S
     }
     if let Some(what) = cancel(words) {
         let label = if what == "all" { "CANCEL ALL".to_string() } else { format!("CANCEL {}S", what.to_uppercase()) };
-        return Some(("CancelReminders", what.to_string(), label));
+        return Some((ActionKind::CancelReminders.as_str(), what.to_string(), label));
     }
     let (kind, due, label) = alarm(words, now).or_else(|| reminder(words, now)).or_else(|| timer(words, now))?;
     let value = format!("{kind}|{due}|{}", flat(&label));
-    Some(("Reminder", value, describe(kind, due, &label, now)))
+    Some((ActionKind::Reminder.as_str(), value, describe(kind, due, &label, now)))
 }
 
 /// Number words become digits, and "a m" / "p m" become "am" / "pm".

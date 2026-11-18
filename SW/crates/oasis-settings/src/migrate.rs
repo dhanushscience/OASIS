@@ -169,7 +169,7 @@ fn pad_buttons(config: &mut Map<String, Value>) {
 }
 
 fn empty_button() -> Value {
-    json!({ "Type": "Shortcut", "Value": "", "Label": "" })
+    json!({ "Type": oasis_core::actions::ActionKind::Shortcut.as_str(), "Value": "", "Label": "" })
 }
 
 // ---- v1 → v2 ---------------------------------------------------------------------------

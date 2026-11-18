@@ -12,6 +12,7 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::Mutex;
 use std::time::Duration;
 
+use oasis_core::actions::ActionKind;
 use oasis_core::onboarding::{self as guide, Blocked, Event, Facts, Made, Progress, Status, StepId, Surface};
 use oasis_engine::{EngineEvent, EngineHandle};
 use oasis_settings::edit::ButtonEdit;
@@ -198,7 +199,7 @@ fn demo_button(e: &EngineHandle) -> Option<(usize, String, String, bool)> {
     let settings = e.settings();
     let profile = settings.profiles.iter().position(|p| p.name == PROFILE)?;
     let button = settings.profiles[profile].config_profiles.first()?.buttons.get(DEMO_BUTTON)?;
-    let empty = button.kind != "Automation" && button.value.trim().is_empty() && button.label.trim().is_empty();
+    let empty = ActionKind::of(&button.kind) != ActionKind::Automation && button.value.trim().is_empty() && button.label.trim().is_empty();
     Some((profile, button.kind.clone(), button.value.clone(), empty))
 }
 
@@ -211,10 +212,10 @@ fn set_demo_button(e: &EngineHandle, profile: usize, kind: &str, value: &str, la
 fn write_demo(app: &AppHandle, progress: &mut Progress, even_if_used: bool) {
     let made = engine(app, |e| {
         let (profile, _, _, empty) = demo_button(e)?;
-        (empty || even_if_used).then(|| set_demo_button(e, profile, "OpenUrl", SITE, "OASIS")).filter(|ok| *ok)
+        (empty || even_if_used).then(|| set_demo_button(e, profile, ActionKind::OpenUrl.as_str(), SITE, "OASIS")).filter(|ok| *ok)
     });
     if made.flatten().is_some() {
-        progress.made = Some(Made { kind: "OpenUrl".into(), value: SITE.into() });
+        progress.made = Some(Made { kind: ActionKind::OpenUrl.as_str().into(), value: SITE.into() });
     }
 }
 
@@ -224,7 +225,7 @@ fn clear_demo(app: &AppHandle, progress: &mut Progress) {
     engine(app, |e| {
         if let Some((profile, kind, value, _)) = demo_button(e) {
             if guide::same_action(&made, &kind, &value) {
-                set_demo_button(e, profile, "Shortcut", "", "");
+                set_demo_button(e, profile, ActionKind::Shortcut.as_str(), "", "");
             }
         }
     });

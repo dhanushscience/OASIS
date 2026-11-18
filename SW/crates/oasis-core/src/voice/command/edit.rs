@@ -3,7 +3,7 @@
 //! and stays text. The keys are ordinary `Shortcut` steps, so the safety tiers apply unchanged.
 //! The Voice setting `EditCommands` (on when absent) switches the table off.
 
-use crate::actions::{ActionStep, ButtonAction};
+use crate::actions::{ActionKind, ActionStep, ButtonAction};
 
 /// Each phrase as [`super::text::normalize`] leaves it, and the keys it presses in order. "ctrl x"
 /// is looked up as "control x".
@@ -109,11 +109,11 @@ pub fn keys(normalized: &str) -> Option<&'static [&'static str]> {
 pub fn lookup(normalized: &str) -> Option<(ButtonAction, String)> {
     let keys = keys(normalized)?;
     let action = match keys {
-        [one] => ButtonAction { kind: "Shortcut".into(), value: (*one).into(), steps: vec![] },
+        [one] => ButtonAction { kind: ActionKind::Shortcut.as_str().into(), value: (*one).into(), steps: vec![] },
         _ => ButtonAction {
-            kind: "Automation".into(),
+            kind: ActionKind::Automation.as_str().into(),
             value: String::new(),
-            steps: keys.iter().map(|k| ActionStep { kind: "Shortcut".into(), value: (*k).into(), ..Default::default() }).collect(),
+            steps: keys.iter().map(|k| ActionStep { kind: ActionKind::Shortcut.as_str().into(), value: (*k).into(), ..Default::default() }).collect(),
         },
     };
     Some((action, keys.join(", ")))

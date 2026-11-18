@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-use oasis_core::actions::{try_allow, ActionStep, MouseClick, Next, UrlScope};
+use oasis_core::actions::{try_allow, ActionKind, ActionStep, MouseClick, Next, UrlScope};
 use oasis_core::display_label::{fit as fit_label, DEFAULT_MAX_LENGTH};
 use oasis_core::matching::profile_targets::{infer_kind, website_match, APP_KIND, WEBSITE_KIND};
 use oasis_core::shortcut::Chord;
@@ -58,25 +58,32 @@ pub struct ButtonEdit {
 
 /// The action types a button can have, in the order a menu shows them.
 pub const ACTION_TYPES: [&str; 8] = [
-    "Shortcut", "LaunchApp", "OpenUrl", "MouseClick", "PasteText", "RunScript", "JoinMeeting", "Automation",
+    ActionKind::Shortcut.as_str(), ActionKind::LaunchApp.as_str(), ActionKind::OpenUrl.as_str(), ActionKind::MouseClick.as_str(), ActionKind::PasteText.as_str(), ActionKind::RunScript.as_str(), ActionKind::JoinMeeting.as_str(), ActionKind::Automation.as_str(),
 ];
 
 /// Whether `kind` + `value` can be saved. A blank value means "nothing bound" and is always
 /// fine; it is what a new button has.
 pub fn validate_action(kind: &str, value: &str) -> Result<(), String> {
     let blank = value.trim().is_empty();
-    match kind {
-        "Shortcut" if !blank => Chord::parse(value).map(|_| ()),
-        "OpenUrl" if !blank => try_allow(value, UrlScope::Automation).map(|_| ()).ok_or_else(|| {
+    match ActionKind::of(kind) {
+        ActionKind::Shortcut if !blank => Chord::parse(value).map(|_| ()),
+        ActionKind::OpenUrl if !blank => try_allow(value, UrlScope::Automation).map(|_| ()).ok_or_else(|| {
             "That address cannot be opened. Only https, http and spotify links are allowed.".to_string()
         }),
-        "MouseClick" if !blank => MouseClick::parse(value)
+        ActionKind::MouseClick if !blank => MouseClick::parse(value)
             .map(|_| ())
             .ok_or_else(|| "Use the screen position as x,y (for example 120,340), or x,y,right.".to_string()),
-        "AutoHotkey" if value.len() > 64 * 1024 => Err("That script is too long (64 KB at most).".to_string()),
-        "Shortcut" | "OpenUrl" | "MouseClick" | "LaunchApp" | "Launch App" | "PasteText" | "RunScript"
-        | "JoinMeeting" | "Automation" | "AutoHotkey" => Ok(()),
-        other => Err(format!("Unknown action type '{other}'.")),
+        ActionKind::AutoHotkey if value.len() > 64 * 1024 => Err("That script is too long (64 KB at most).".to_string()),
+        ActionKind::Shortcut
+        | ActionKind::OpenUrl
+        | ActionKind::MouseClick
+        | ActionKind::LaunchApp
+        | ActionKind::PasteText
+        | ActionKind::RunScript
+        | ActionKind::JoinMeeting
+        | ActionKind::Automation
+        | ActionKind::AutoHotkey => Ok(()),
+        _ => Err(format!("Unknown action type '{kind}'.")),
     }
 }
 
@@ -84,13 +91,23 @@ pub fn validate_action(kind: &str, value: &str) -> Result<(), String> {
 /// "Wait for Release" was removed (an old one is kept and skipped when run); a fixed "Delay" is no longer
 /// offered, since each step now waits until the one before it is ready (an old one still runs).
 pub const STEP_TYPES: [&str; 8] =
-    ["QuickLaunch", "LaunchApp", "OpenUrl", "Shortcut", "AutoHotkey", "PlaySound", "MouseClick", "JoinMeeting"];
+    [ActionKind::QuickLaunch.as_str(), ActionKind::LaunchApp.as_str(), ActionKind::OpenUrl.as_str(), ActionKind::Shortcut.as_str(), ActionKind::AutoHotkey.as_str(), ActionKind::PlaySound.as_str(), ActionKind::MouseClick.as_str(), ActionKind::JoinMeeting.as_str()];
 
 /// Step types that may be written. Beyond the editor's own, a script step (how the C# script mode
 /// stores a script) and a paste step are accepted. A step of any other kind is kept, not editable.
 pub const WRITABLE_STEP_TYPES: [&str; 12] = [
-    "QuickLaunch", "LaunchApp", "Launch App", "OpenUrl", "Shortcut", "AutoHotkey", "Delay", "MouseClick",
-    "JoinMeeting", "RunScript", "PasteText", "PlaySound",
+    ActionKind::QuickLaunch.as_str(),
+    ActionKind::LaunchApp.as_str(),
+    "Launch App", // the old spelling, still accepted
+    ActionKind::OpenUrl.as_str(),
+    ActionKind::Shortcut.as_str(),
+    ActionKind::AutoHotkey.as_str(),
+    ActionKind::Delay.as_str(),
+    ActionKind::MouseClick.as_str(),
+    ActionKind::JoinMeeting.as_str(),
+    ActionKind::RunScript.as_str(),
+    ActionKind::PasteText.as_str(),
+    ActionKind::PlaySound.as_str(),
 ];
 
 /// A step as saved. The links and the place in the builder are written only when set, so a plain
@@ -122,10 +139,10 @@ fn validate_step(number: usize, step: &ActionStep, existing: &[ActionStep]) -> R
     if !WRITABLE_STEP_TYPES.contains(&step.kind.as_str()) {
         return Ok(()); // kept as it was
     }
-    match step.kind.as_str() {
-        "PlaySound" if oasis_core::actions::sounds::find(&step.value).is_none() => Err(format!("{prefix}pick a sound.")),
-        "PlaySound" => Ok(()),
-        "Delay" => step
+    match step.kind() {
+        ActionKind::PlaySound if oasis_core::actions::sounds::find(&step.value).is_none() => Err(format!("{prefix}pick a sound.")),
+        ActionKind::PlaySound => Ok(()),
+        ActionKind::Delay => step
             .value
             .trim()
             .parse::<i64>()
@@ -133,11 +150,12 @@ fn validate_step(number: usize, step: &ActionStep, existing: &[ActionStep]) -> R
             .filter(|ms| *ms >= 0)
             .map(|_| ())
             .ok_or_else(|| format!("{prefix}a delay is a number of milliseconds, 0 or more.")),
-        "JoinMeeting" => Ok(()),
+        ActionKind::JoinMeeting => Ok(()),
         // The value is a Quick Launch setup's id; `set_button` checks that it exists.
-        "QuickLaunch" if step.value.trim().is_empty() => Err(format!("{prefix}pick the Quick Launch setup to open.")),
-        "QuickLaunch" => Ok(()),
-        kind => {
+        ActionKind::QuickLaunch if step.value.trim().is_empty() => Err(format!("{prefix}pick the Quick Launch setup to open.")),
+        ActionKind::QuickLaunch => Ok(()),
+        _ => {
+            let kind = step.kind.as_str();
             if step.value.trim().is_empty() {
                 return Err(format!("{prefix}it needs a value."));
             }
@@ -164,12 +182,12 @@ impl Settings {
             .and_then(|c| c.buttons.get(index))
             .map(Button::automation_steps)
             .unwrap_or_default();
-        if edit.kind == "Automation" && edit.steps.is_empty() {
+        if ActionKind::of(&edit.kind) == ActionKind::Automation && edit.steps.is_empty() {
             return invalid("Add at least one step, or choose what the button does instead.");
         }
         for (n, step) in edit.steps.iter().enumerate() {
             validate_step(n + 1, step, &existing).or_else(invalid)?;
-            if step.kind == "QuickLaunch" && crate::quick_launch::find(self, &step.value).is_none() {
+            if step.kind() == ActionKind::QuickLaunch && crate::quick_launch::find(self, &step.value).is_none() {
                 return invalid(format!("Step {}: that Quick Launch setup does not exist.", n + 1));
             }
             if [step.on_ok, step.on_fail].iter().any(|l| matches!(l, Next::Step(t) if *t >= edit.steps.len())) {
@@ -187,16 +205,16 @@ impl Settings {
             .get_mut(index)
             .ok_or(EditError::NoSuchButton { profile, config, button: index })?;
 
-        let was_automation = button.kind == "Automation";
+        let was_automation = ActionKind::of(&button.kind) == ActionKind::Automation;
         button.kind = edit.kind.clone();
-        button.value = if edit.kind == "Automation" { String::new() } else { edit.value };
+        button.value = if ActionKind::of(&edit.kind) == ActionKind::Automation { String::new() } else { edit.value };
         // Shown on the pad in capitals and shortened to fit, as in C#. A blank label stays blank.
         button.label = if edit.label.trim().is_empty() {
             String::new()
         } else {
             fit_label(edit.label.trim(), DEFAULT_MAX_LENGTH)
         };
-        button.steps = if edit.kind == "Automation" {
+        button.steps = if ActionKind::of(&edit.kind) == ActionKind::Automation {
             Value::Array(
                 edit.steps.iter().map(step_json).collect(),
             )
@@ -481,7 +499,7 @@ fn apply_set_edit(config: &mut ConfigProfile, edit: SetEdit, primary: bool) -> R
 impl Button {
     /// A button with nothing bound, as the C# app creates a new profile's buttons.
     pub fn blank() -> Button {
-        Button { kind: "Shortcut".into(), steps: json!([]), ..Button::default() }
+        Button { kind: ActionKind::Shortcut.as_str().into(), steps: json!([]), ..Button::default() }
     }
 }
 

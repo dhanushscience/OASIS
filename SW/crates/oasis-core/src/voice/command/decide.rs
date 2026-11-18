@@ -5,7 +5,7 @@
 
 use std::collections::HashSet;
 
-use crate::actions::ButtonAction;
+use crate::actions::{ActionKind, ButtonAction};
 use crate::speech::GlossaryEntry;
 
 use super::classifier::looks_like_command;
@@ -155,7 +155,7 @@ fn no_command(f: &Facts<'_>, phrase: &gate::Phrase, routed: &RouteResult, exists
     if (f.in_text_field || prose) && !phrase.addressed {
         return Decision::Type;
     }
-    let is_launch = |kind: &str| kind.eq_ignore_ascii_case("LaunchApp");
+    let is_launch = |kind: &str| ActionKind::of_ignore_case(kind) == ActionKind::LaunchApp;
     let offer = routed
         .suggestion
         .clone()
@@ -190,8 +190,8 @@ fn no_command(f: &Facts<'_>, phrase: &gate::Phrase, routed: &RouteResult, exists
 /// Several ("open X on … and open Y on …"): the missing app's launch and the move of its window
 /// go, and what is left runs, as long as it still opens something.
 fn without_missing_apps(action: ButtonAction, exists: &dyn Fn(&str) -> bool) -> (Option<ButtonAction>, Vec<String>) {
-    let is_launch = |kind: &str| kind.eq_ignore_ascii_case("LaunchApp");
-    if !action.kind.eq_ignore_ascii_case("Automation") {
+    let is_launch = |kind: &str| ActionKind::of_ignore_case(kind) == ActionKind::LaunchApp;
+    if ActionKind::of_ignore_case(&action.kind) != ActionKind::Automation {
         if is_launch(&action.kind) && !exists(&action.value) {
             return (None, vec![action.value]);
         }
@@ -204,7 +204,7 @@ fn without_missing_apps(action: ButtonAction, exists: &dyn Fn(&str) -> bool) -> 
             skip_window = true;
             continue;
         }
-        if std::mem::take(&mut skip_window) && step.kind.eq_ignore_ascii_case("WindowCommand") {
+        if std::mem::take(&mut skip_window) && ActionKind::of_ignore_case(&step.kind) == ActionKind::WindowCommand {
             continue;
         }
         steps.push(step);

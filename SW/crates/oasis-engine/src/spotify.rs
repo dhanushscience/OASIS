@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use base64::Engine as _;
+use oasis_core::actions::ActionKind;
 use oasis_core::voice::command::spotify::{self as rules, Candidate, Device, QueryKind};
 use oasis_platform::ports::SecretStore;
 use serde_json::{json, Value};
@@ -765,10 +766,10 @@ impl Runner for Hub {
             return Err(SETUP_HINT.into());
         }
         let playback = Playback { api: &UreqApi, tokens: self.auth.as_ref(), host: self.host.as_ref(), timing: Timing::REAL };
-        match kind {
-            "SpotifyControl" => playback.control(value),
-            "SpotifyPlay" => playback.play(value),
-            other => Err(format!("Unknown Spotify action: {other}")),
+        match ActionKind::of(kind) {
+            ActionKind::SpotifyControl => playback.control(value),
+            ActionKind::SpotifyPlay => playback.play(value),
+            _ => Err(format!("Unknown Spotify action: {kind}")),
         }
     }
 }

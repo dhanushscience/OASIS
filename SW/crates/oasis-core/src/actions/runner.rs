@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use super::{try_allow, ActionBackend, ActionStep, ButtonAction, MouseClick, Next, UrlScope};
+use super::{try_allow, ActionBackend, ActionKind, ActionStep, ButtonAction, MouseClick, Next, UrlScope};
 use crate::shortcut::Chord;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,10 +35,10 @@ pub fn run_action(
     action: &ButtonAction,
     button_index: i32,
 ) -> ActionOutcome {
-    if action.kind == "JoinMeeting" {
-        return ActionOutcome::Single(run_single(backend, "JoinMeeting", ""));
+    if action.kind() == ActionKind::JoinMeeting {
+        return ActionOutcome::Single(run_single(backend, ActionKind::JoinMeeting.as_str(), ""));
     }
-    if action.kind == "Automation" {
+    if action.kind() == ActionKind::Automation {
         return ActionOutcome::Automation(run_steps(backend, &action.steps, button_index));
     }
     if action.value.trim().is_empty() {
@@ -55,7 +55,7 @@ const MAX_RUNS: usize = 100;
 
 /// Steps that open something: the next step waits until it is really there.
 fn opens_something(kind: &str) -> bool {
-    matches!(kind, "LaunchApp" | "Launch App" | "OpenUrl" | "QuickLaunch")
+    matches!(ActionKind::of(kind), ActionKind::LaunchApp | ActionKind::OpenUrl | ActionKind::QuickLaunch)
 }
 
 /// Run steps from the first, following each step's links: on success its `on_ok` (the step below
@@ -104,8 +104,8 @@ pub fn run_steps(
 }
 
 fn run_step(backend: &mut dyn ActionBackend, step: &ActionStep) -> Result<(), String> {
-    match step.kind.as_str() {
-        "Delay" => {
+    match step.kind() {
+        ActionKind::Delay => {
             let millis = step
                 .value
                 .trim()
@@ -117,8 +117,9 @@ fn run_step(backend: &mut dyn ActionBackend, step: &ActionStep) -> Result<(), St
             Ok(())
         }
         // "Wait for Release" was removed; a step saved before that is skipped, not a failure.
-        "WaitRelease" | "Wait for Release" => Ok(()),
-        kind => {
+        ActionKind::WaitRelease => Ok(()),
+        _ => {
+            let kind = step.kind.as_str();
             if run_single(backend, kind, &step.value) {
                 Ok(())
             } else {
@@ -129,37 +130,37 @@ fn run_step(backend: &mut dyn ActionBackend, step: &ActionStep) -> Result<(), St
 }
 
 fn describe_failure(kind: &str, value: &str) -> String {
-    match kind {
-        "Shortcut" => format!("Could not send shortcut '{value}'."),
-        "PasteText" => "Could not paste text (clipboard or shortcut failed).".into(),
-        "MouseClick" => format!("Could not click at '{value}'."),
-        "OpenUrl" => format!("Could not open URL '{value}'."),
-        "Launch App" | "LaunchApp" => format!("Could not launch '{value}'."),
-        "CloseApp" => format!("'{value}' has no window open to close."),
-        "WindowCommand" | "WindowSplit" => "Could not do that to the window.".into(),
-        "WindowLayout" => "Could not save or restore that layout.".into(),
-        "QuickLaunch" => "Could not open that Quick Launch setup.".into(),
-        "PlaySound" => format!("There is no sound called '{value}'."),
-        "AutoHotkey" => "Could not run the AutoHotkey script: scripts are off in Settings, or AutoHotkey v2 is not installed.".into(),
+    match ActionKind::of(kind) {
+        ActionKind::Shortcut => format!("Could not send shortcut '{value}'."),
+        ActionKind::PasteText => "Could not paste text (clipboard or shortcut failed).".into(),
+        ActionKind::MouseClick => format!("Could not click at '{value}'."),
+        ActionKind::OpenUrl => format!("Could not open URL '{value}'."),
+        ActionKind::LaunchApp => format!("Could not launch '{value}'."),
+        ActionKind::CloseApp => format!("'{value}' has no window open to close."),
+        ActionKind::WindowCommand | ActionKind::WindowSplit => "Could not do that to the window.".into(),
+        ActionKind::WindowLayout => "Could not save or restore that layout.".into(),
+        ActionKind::QuickLaunch => "Could not open that Quick Launch setup.".into(),
+        ActionKind::PlaySound => format!("There is no sound called '{value}'."),
+        ActionKind::AutoHotkey => "Could not run the AutoHotkey script: scripts are off in Settings, or AutoHotkey v2 is not installed.".into(),
         _ => format!("Could not run action '{kind}'."),
     }
 }
 
 /// One action. `false` if it could not be done or is not allowed.
 pub fn run_single(backend: &mut dyn ActionBackend, kind: &str, value: &str) -> bool {
-    match kind {
-        "Shortcut" => Chord::parse(value).is_ok_and(|chord| backend.send_shortcut(&chord)),
-        "OpenUrl" => match try_allow(value, UrlScope::Automation) {
+    match ActionKind::of(kind) {
+        ActionKind::Shortcut => Chord::parse(value).is_ok_and(|chord| backend.send_shortcut(&chord)),
+        ActionKind::OpenUrl => match try_allow(value, UrlScope::Automation) {
             Some(url) => backend.open_url(&url),
             None => {
                 backend.security_log(&format!("Blocked OpenUrl scheme: {value}"));
                 false
             }
         },
-        "Launch App" | "LaunchApp" => launch_app(backend, value),
-        "CloseApp" => !value.trim().is_empty() && backend.close_app(value.trim()),
-        "WindowCommand" | "WindowSplit" | "WindowLayout" => !value.trim().is_empty() && backend.window_action(kind, value.trim()),
-        "RunScript" => {
+        ActionKind::LaunchApp => launch_app(backend, value),
+        ActionKind::CloseApp => !value.trim().is_empty() && backend.close_app(value.trim()),
+        ActionKind::WindowCommand | ActionKind::WindowSplit | ActionKind::WindowLayout => !value.trim().is_empty() && backend.window_action(kind, value.trim()),
+        ActionKind::RunScript => {
             if !backend.run_script_allowed() {
                 backend.security_log("Blocked RunScript — not enabled in settings.");
                 return false;
@@ -168,24 +169,24 @@ pub fn run_single(backend: &mut dyn ActionBackend, kind: &str, value: &str) -> b
             true
         }
         // The same switch as RunScript: an AutoHotkey script can do anything a program can.
-        "AutoHotkey" => {
+        ActionKind::AutoHotkey => {
             if !backend.run_script_allowed() {
                 backend.security_log("Blocked AutoHotkey — scripts are not enabled in settings.");
                 return false;
             }
             !value.trim().is_empty() && backend.run_autohotkey(value)
         }
-        "MouseClick" => MouseClick::parse(value).is_some_and(|click| backend.mouse_click(click)),
-        "PasteText" => !value.is_empty() && backend.paste_text(value),
-        "OpenSettings" => super::settings_pages::is_known(value) && backend.open_url(value),
-        "JoinMeeting" => backend.join_meeting(),
-        "QuickLaunch" => !value.trim().is_empty() && backend.quick_launch(value.trim()),
-        "LockPc" => backend.system("lock"),
-        "Chime" => matches!(value, "1" | "4") && backend.system(&format!("chime:{value}")),
-        "PlaySound" => super::sounds::find(value).is_some() && backend.system(&format!("sound:{}", value.trim())),
-        "Radio" if is_radio(value) => backend.system(&format!("radio:{}", value.replace('|', ":"))),
-        "Brightness" if is_brightness(value) => backend.system(&format!("brightness:{value}")),
-        "Theme" => matches!(value, "dark" | "light") && backend.system(&format!("theme-{value}")),
+        ActionKind::MouseClick => MouseClick::parse(value).is_some_and(|click| backend.mouse_click(click)),
+        ActionKind::PasteText => !value.is_empty() && backend.paste_text(value),
+        ActionKind::OpenSettings => super::settings_pages::is_known(value) && backend.open_url(value),
+        ActionKind::JoinMeeting => backend.join_meeting(),
+        ActionKind::QuickLaunch => !value.trim().is_empty() && backend.quick_launch(value.trim()),
+        ActionKind::LockPc => backend.system("lock"),
+        ActionKind::Chime => matches!(value, "1" | "4") && backend.system(&format!("chime:{value}")),
+        ActionKind::PlaySound => super::sounds::find(value).is_some() && backend.system(&format!("sound:{}", value.trim())),
+        ActionKind::Radio if is_radio(value) => backend.system(&format!("radio:{}", value.replace('|', ":"))),
+        ActionKind::Brightness if is_brightness(value) => backend.system(&format!("brightness:{value}")),
+        ActionKind::Theme => matches!(value, "dark" | "light") && backend.system(&format!("theme-{value}")),
         _ => false,
     }
 }

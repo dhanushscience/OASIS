@@ -1,7 +1,7 @@
 //! Port of `Services/ProfileExtensions.cs` (the read-only parts) and the button → action
 //! conversion the executor needs.
 
-use oasis_core::actions::{ActionStep, ButtonAction, Next};
+use oasis_core::actions::{ActionKind, ActionStep, ButtonAction, Next};
 use oasis_core::bridge::ConfigWhen;
 use serde_json::Value;
 
@@ -70,7 +70,7 @@ impl Button {
                 };
                 let int = |key: &str| step.get(key).and_then(Value::as_i64);
                 ActionStep {
-                    kind: text("Type", "Delay"),
+                    kind: text("Type", ActionKind::Delay.as_str()),
                     value: text("Value", "1000"),
                     on_ok: Next::from_code(int("Next")),
                     on_fail: Next::from_code(int("OnFail")),

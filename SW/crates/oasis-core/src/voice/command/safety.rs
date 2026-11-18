@@ -8,7 +8,7 @@
 
 use std::collections::HashSet;
 
-use crate::actions::ButtonAction;
+use crate::actions::{ActionKind, ButtonAction};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SafetyTier {
@@ -71,14 +71,14 @@ fn contains_ci(text: &str, needle: &str) -> bool {
 /// The tier of one step `(type, value)`.
 pub fn step_tier(kind: &str, value: &str) -> SafetyTier {
     let (kind, value) = (kind.trim(), value.trim());
-    let is = |t: &str| kind.eq_ignore_ascii_case(t);
-    if ["RunScript", "AutoHotkey", "MouseClick", "DeleteFile", "MoveFile"].iter().any(|t| is(t)) {
+    let k = ActionKind::of_ignore_case(kind);
+    if matches!(k, ActionKind::RunScript | ActionKind::AutoHotkey | ActionKind::MouseClick | ActionKind::DeleteFile | ActionKind::MoveFile) {
         return SafetyTier::Blocked;
     }
-    if is("LaunchApp") && names_a_shell(value) {
+    if k == ActionKind::LaunchApp && names_a_shell(value) {
         return SafetyTier::Blocked;
     }
-    if is("Shortcut") {
+    if k == ActionKind::Shortcut {
         if BLOCKED_SHORTCUTS.iter().any(|s| contains_ci(value, s)) {
             return SafetyTier::Blocked;
         }
@@ -90,18 +90,18 @@ pub fn step_tier(kind: &str, value: &str) -> SafetyTier {
             return SafetyTier::Caution;
         }
     }
-    if is("PasteText") && !value.is_empty() && ["del ", "rm ", "format "].iter().any(|d| contains_ci(value, d)) {
+    if k == ActionKind::PasteText && !value.is_empty() && ["del ", "rm ", "format "].iter().any(|d| contains_ci(value, d)) {
         return SafetyTier::Caution;
     }
-    if is("Radio") && matches!(value, "wifi|off" | "bluetooth|off" | "airplane|on") {
+    if k == ActionKind::Radio && matches!(value, "wifi|off" | "bluetooth|off" | "airplane|on") {
         return SafetyTier::Caution;
     }
-    if is("LockPc") {
+    if k == ActionKind::LockPc {
         return SafetyTier::Caution;
     }
     // Every close asks first (owner rule 2026-11-13, replaces W8's "one window does not ask").
-    let closes_a_window = is("WindowCommand") && value.to_lowercase().starts_with("close|");
-    if is("CloseWindow") || is("CloseApp") || closes_a_window {
+    let closes_a_window = k == ActionKind::WindowCommand && value.to_lowercase().starts_with("close|");
+    if k == ActionKind::CloseWindow || k == ActionKind::CloseApp || closes_a_window {
         return SafetyTier::Caution;
     }
     let corpus = format!("{kind} {value}").to_lowercase();
@@ -149,7 +149,7 @@ pub fn evaluate(steps: &[(String, String)]) -> SafetyEvaluation {
 
 /// Apps, links and pasted text are "first-use sensitive": they ask the first time.
 pub fn is_first_use_sensitive(kind: &str) -> bool {
-    ["LaunchApp", "OpenUrl", "PasteText"].iter().any(|t| kind.trim().eq_ignore_ascii_case(t))
+    matches!(ActionKind::of_ignore_case(kind.trim()), ActionKind::LaunchApp | ActionKind::OpenUrl | ActionKind::PasteText)
 }
 
 /// The key a target is remembered under: `launchapp:chrome`, `openurl:https://example.com`.
@@ -161,11 +161,11 @@ pub fn target_key(kind: &str, value: &str) -> String {
 
 fn normalize_target(kind: &str, value: &str) -> String {
     let v = value.trim().trim_matches('"');
-    match kind {
+    match ActionKind::of_ignore_case(kind) {
         // A known search site is trusted per site, not per query, or every new voice search would wait
         // for a pad press. Read-only results pages only; any other address keys on the whole URL.
-        "openurl" => super::web_search::search_endpoint(v).unwrap_or_else(|| v.trim_end_matches('/').to_lowercase()),
-        "launchapp" => match v.split_once('|') {
+        ActionKind::OpenUrl => super::web_search::search_endpoint(v).unwrap_or_else(|| v.trim_end_matches('/').to_lowercase()),
+        ActionKind::LaunchApp => match v.split_once('|') {
             Some((browser, url)) if !browser.trim().is_empty() => match super::web_search::search_endpoint(url) {
                 Some(endpoint) => format!("{}|{endpoint}", normalize_launch_target(browser.trim())),
                 None => normalize_launch_target(v),
@@ -205,7 +205,7 @@ pub fn decide(
             !trusted.iter().any(|known| known.eq_ignore_ascii_case(&key))
         });
     // A plan of nothing but pauses does nothing, so there is nothing to approve.
-    let every_time = mode == ApprovalMode::Always && steps.iter().any(|(t, _)| !t.eq_ignore_ascii_case("Delay"));
+    let every_time = mode == ApprovalMode::Always && steps.iter().any(|(t, _)| ActionKind::of_ignore_case(t) != ActionKind::Delay);
     ConfirmationDecision { required: caution || first_use || every_time, caution, first_use, every_time }
 }
 
@@ -216,7 +216,7 @@ pub fn sensitive_target_keys(steps: &[(String, String)]) -> Vec<String> {
 
 /// The steps of an action: an automation's own steps, or the single step.
 pub fn steps_of(action: &ButtonAction) -> Vec<(String, String)> {
-    if action.kind.eq_ignore_ascii_case("Automation") {
+    if ActionKind::of_ignore_case(&action.kind) == ActionKind::Automation {
         action.steps.iter().map(|s| (s.kind.clone(), s.value.clone())).collect()
     } else {
         vec![(action.kind.clone(), action.value.clone())]

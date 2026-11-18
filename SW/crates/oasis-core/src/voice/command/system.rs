@@ -2,6 +2,8 @@
 //! `Oasis.Core/SystemControl/SystemCommandPhrase.cs`. Every phrase must be the whole utterance,
 //! so "lock the computer and open chrome" is not read as a lock.
 
+use crate::actions::ActionKind;
+
 /// The action `(kind, value)` and a label, or `None` when the phrase is something else.
 pub fn plan(normalized: &str) -> Option<(&'static str, &'static str, &'static str)> {
     let text = normalized.strip_prefix("please ").unwrap_or(normalized);
@@ -9,14 +11,14 @@ pub fn plan(normalized: &str) -> Option<(&'static str, &'static str, &'static st
         let rest = rest.strip_prefix("down ").unwrap_or(rest);
         let rest = ["the ", "my "].into_iter().find_map(|p| rest.strip_prefix(p)).unwrap_or(rest);
         if matches!(rest, "screen" | "computer" | "pc" | "laptop" | "workstation") {
-            return Some(("LockPc", "lock", "LOCK PC"));
+            return Some((ActionKind::LockPc.as_str(), "lock", "LOCK PC"));
         }
         return None;
     }
     if let Some(mode) = text.strip_prefix("turn off ").or_else(|| text.strip_prefix("disable ")).or_else(|| text.strip_prefix("switch off ")) {
         return match mode {
-            "dark mode" | "dark theme" => Some(("Theme", "light", "LIGHT MODE")),
-            "light mode" | "light theme" => Some(("Theme", "dark", "DARK MODE")),
+            "dark mode" | "dark theme" => Some((ActionKind::Theme.as_str(), "light", "LIGHT MODE")),
+            "light mode" | "light theme" => Some((ActionKind::Theme.as_str(), "dark", "DARK MODE")),
             _ => None,
         };
     }
@@ -37,7 +39,7 @@ pub fn plan(normalized: &str) -> Option<(&'static str, &'static str, &'static st
             }
         }
     };
-    Some(("Theme", mode, if mode == "dark" { "DARK MODE" } else { "LIGHT MODE" }))
+    Some((ActionKind::Theme.as_str(), mode, if mode == "dark" { "DARK MODE" } else { "LIGHT MODE" }))
 }
 
 /// "turn off wifi", "bluetooth on", "enable airplane mode": `wifi|off` and a label. Whole

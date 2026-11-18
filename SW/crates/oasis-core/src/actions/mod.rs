@@ -4,6 +4,7 @@
 //! goes through [`ActionBackend`], so the rules run and are tested without touching a desktop.
 
 pub mod app_resolver;
+pub mod kind;
 pub mod runner;
 pub mod settings_pages;
 pub mod sounds;
@@ -13,6 +14,7 @@ use std::time::Duration;
 
 use crate::shortcut::Chord;
 
+pub use kind::ActionKind;
 pub use runner::{run_action, run_single, run_steps, ActionOutcome, AutomationResult, StepOutcome, READY_LIMIT};
 pub use url_policy::{try_allow, UrlScope};
 
@@ -69,15 +71,31 @@ pub struct ButtonAction {
     pub steps: Vec<ActionStep>,
 }
 
+impl ButtonAction {
+    /// The kind, read exactly like the runner does. The text in `kind` is what gets saved.
+    pub fn kind(&self) -> ActionKind {
+        ActionKind::of(&self.kind)
+    }
+}
+
+impl ActionStep {
+    /// The kind, read exactly like the runner does. The text in `kind` is what gets saved.
+    pub fn kind(&self) -> ActionKind {
+        ActionKind::of(&self.kind)
+    }
+}
+
 /// True when the action does not depend on which window is in front and nothing queued after it
 /// can depend on it, so it may run beside a slow "open app" instead of waiting behind it. Kept
 /// narrow on purpose: anything unknown, and every automation, stays in the ordered lane.
 pub fn is_focus_free(action: &ButtonAction) -> bool {
     use crate::shortcut::ChordKey::*;
-    match action.kind.as_str() {
-        "Reminder" | "CancelReminders" | "Chime" | "PlaySound" | "Radio" | "Brightness" => true,
-        k if k.starts_with("Spotify") => true,
-        "Shortcut" => Chord::parse(&action.value).is_ok_and(|c| {
+    if ActionKind::is_spotify_text(&action.kind) {
+        return true;
+    }
+    match action.kind() {
+        ActionKind::Reminder | ActionKind::CancelReminders | ActionKind::Chime | ActionKind::PlaySound | ActionKind::Radio | ActionKind::Brightness => true,
+        ActionKind::Shortcut => Chord::parse(&action.value).is_ok_and(|c| {
             !c.keys.is_empty()
                 && c.keys.iter().all(|k| matches!(k, VolumeUp | VolumeDown | VolumeMute | PlayPause | NextTrack | PrevTrack | MediaStop))
         }),

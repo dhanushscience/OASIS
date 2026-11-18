@@ -4,7 +4,7 @@
 //! A window goes to a screen and either a `Layout` (as opened, maximized, a half) or a `Region`, any
 //! box of the editor's grid. The editor saves with `save_setup` and `delete_setup`.
 
-use oasis_core::actions::{ActionStep, ButtonAction};
+use oasis_core::actions::{ActionKind, ActionStep, ButtonAction};
 use oasis_core::placement::{Layout, PixelRect, Region};
 use oasis_core::quick_launch::QuickSetupRef;
 use oasis_core::voice::command::safety::{step_tier, SafetyTier};
@@ -143,9 +143,9 @@ pub fn find(settings: &Settings, id_or_name: &str) -> Option<Setup> {
 /// The action step an item amounts to, which is what the safety rules judge.
 pub fn step_of(item: &Item) -> (&'static str, String) {
     match item.kind {
-        ItemKind::App | ItemKind::Folder => ("LaunchApp", item.target.clone()),
-        ItemKind::Url if item.open_with.is_empty() => ("OpenUrl", item.target.clone()),
-        ItemKind::Url => ("LaunchApp", format!("{}|{}", item.open_with, item.target)),
+        ItemKind::App | ItemKind::Folder => (ActionKind::LaunchApp.as_str(), item.target.clone()),
+        ItemKind::Url if item.open_with.is_empty() => (ActionKind::OpenUrl.as_str(), item.target.clone()),
+        ItemKind::Url => (ActionKind::LaunchApp.as_str(), format!("{}|{}", item.open_with, item.target)),
     }
 }
 
@@ -173,11 +173,11 @@ pub fn to_action(setup: &Setup) -> (ButtonAction, Vec<String>) {
     for item in &setup.items {
         let (kind, value) = step_of(item);
         if !steps.is_empty() {
-            steps.push(ActionStep { kind: "Delay".into(), value: PAUSE_MS.to_string(), ..Default::default() });
+            steps.push(ActionStep { kind: ActionKind::Delay.as_str().into(), value: PAUSE_MS.to_string(), ..Default::default() });
         }
         steps.push(ActionStep { kind: kind.into(), value, ..Default::default() });
     }
-    (ButtonAction { kind: "Automation".into(), value: String::new(), steps }, skipped)
+    (ButtonAction { kind: ActionKind::Automation.as_str().into(), value: String::new(), steps }, skipped)
 }
 
 

@@ -13,7 +13,7 @@
 //! shortcut: hand-set weights checked against the labelled set in the tests below; refit them on
 //! more real recordings, or move to a small classifier, if testers report wrong calls.
 
-use crate::actions::ButtonAction;
+use crate::actions::{ActionKind, ButtonAction};
 
 use super::classifier::{looks_like_command, without_address};
 use super::gate::Phrase;
@@ -130,9 +130,9 @@ pub fn tier(action: &ButtonAction) -> SafetyTier {
 /// "open chatgpt" names no app on this PC but a site the catalog knows: open the site instead.
 /// Anything else comes back unchanged.
 pub fn site_for_missing_app(action: ButtonAction, exists: &dyn Fn(&str) -> bool) -> ButtonAction {
-    let is_launch = action.kind.eq_ignore_ascii_case("LaunchApp") && !action.value.contains('|');
+    let is_launch = ActionKind::of_ignore_case(&action.kind) == ActionKind::LaunchApp && !action.value.contains('|');
     match crate::matching::web_catalog::try_resolve(&action.value).filter(|_| is_launch && !exists(&action.value)) {
-        Some(url) => ButtonAction { kind: "OpenUrl".into(), value: url.into(), steps: vec![] },
+        Some(url) => ButtonAction { kind: ActionKind::OpenUrl.as_str().into(), value: url.into(), steps: vec![] },
         None => action,
     }
 }
@@ -141,7 +141,7 @@ pub fn site_for_missing_app(action: ButtonAction, exists: &dyn Fn(&str) -> bool)
 fn is_free_text(action: &ButtonAction) -> bool {
     steps_of(action).iter().any(|(kind, value)| {
         let target = value.split_once('|').map_or(value.as_str(), |(_, url)| url);
-        ["PasteText", "SpotifyPlay"].iter().any(|k| kind.eq_ignore_ascii_case(k)) || super::web_search::search_endpoint(target).is_some()
+        matches!(ActionKind::of_ignore_case(kind), ActionKind::PasteText | ActionKind::SpotifyPlay) || super::web_search::search_endpoint(target).is_some()
     })
 }
 

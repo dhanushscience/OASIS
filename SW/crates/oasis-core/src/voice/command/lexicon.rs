@@ -2,7 +2,7 @@
 //! `Services/Voice/VoiceLexicon.cs`. Pure: the caller passes in the profile data and the list of
 //! running apps, so the rules can be tested without a desktop.
 
-use crate::actions::ButtonAction;
+use crate::actions::{ActionKind, ButtonAction};
 
 use super::text::normalize;
 
@@ -107,7 +107,7 @@ pub fn build_lexicon(inputs: &LexiconInputs<'_>) -> Vec<LexiconEntry> {
         ("next track", "MediaNextTrack", "NEXT"),
         ("previous track", "MediaPreviousTrack", "PREV"),
     ] {
-        let action = ButtonAction { kind: "Shortcut".into(), value: value.into(), steps: vec![] };
+        let action = ButtonAction { kind: ActionKind::Shortcut.as_str().into(), value: value.into(), steps: vec![] };
         add(&mut list, phrase, LexiconKind::BuiltIn, Some((action, label.to_string())), None, None, false);
     }
     list

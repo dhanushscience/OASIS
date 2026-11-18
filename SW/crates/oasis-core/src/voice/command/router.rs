@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 
-use crate::actions::ButtonAction;
+use crate::actions::{ActionKind, ButtonAction};
 use crate::matching::similarity;
 use crate::shortcut::Chord;
 use crate::voice::VoiceActionPolicy;
@@ -125,7 +125,7 @@ pub fn route(transcript: &str, lexicon: &[LexiconEntry], settings: &RouterSettin
     let mut steps = Vec::new();
     for r in &results {
         if !steps.is_empty() {
-            steps.push(crate::actions::ActionStep { kind: "Delay".into(), value: "500".into(), ..Default::default() });
+            steps.push(crate::actions::ActionStep { kind: ActionKind::Delay.as_str().into(), value: "500".into(), ..Default::default() });
         }
         for (kind, value) in super::safety::steps_of(r.action.as_ref().expect("routed")) {
             steps.push(crate::actions::ActionStep { kind, value, ..Default::default() });
@@ -133,7 +133,7 @@ pub fn route(transcript: &str, lexicon: &[LexiconEntry], settings: &RouterSettin
     }
     let label = results.iter().map(|r| r.label.as_str()).collect::<Vec<_>>().join(" THEN ");
     let score = results.iter().map(|r| r.score).fold(1.0, f64::min);
-    RouteResult::ran(transcript, ButtonAction { kind: "Automation".into(), value: String::new(), steps }, label, score)
+    RouteResult::ran(transcript, ButtonAction { kind: ActionKind::Automation.as_str().into(), value: String::new(), steps }, label, score)
 }
 
 fn route_one(transcript: &str, lexicon: &[LexiconEntry], settings: &RouterSettings) -> RouteResult {
@@ -143,7 +143,7 @@ fn route_one(transcript: &str, lexicon: &[LexiconEntry], settings: &RouterSettin
     }
 
     if let Some(id) = crate::quick_launch::matching(transcript, &settings.quick_launch) {
-        return RouteResult::ran(transcript, action("QuickLaunch", id), "QUICK LAUNCH", 1.0);
+        return RouteResult::ran(transcript, action(ActionKind::QuickLaunch.as_str(), id), "QUICK LAUNCH", 1.0);
     }
     // A button whose label is exactly what was said beats the built-in phrases below ("lock screen").
     if let Some(entry) = lexicon.iter().find(|e| e.kind == LexiconKind::ButtonLabel && e.normalized == normalized) {
@@ -177,37 +177,37 @@ fn route_one(transcript: &str, lexicon: &[LexiconEntry], settings: &RouterSettin
         return RouteResult::ran(transcript, action(kind, value), label, 1.0);
     }
     if is_join_meeting(&normalized) {
-        return RouteResult::ran(transcript, action("JoinMeeting", ""), "JOIN MEETING", 1.0);
+        return RouteResult::ran(transcript, action(ActionKind::JoinMeeting.as_str(), ""), "JOIN MEETING", 1.0);
     }
     match super::spotify::parse(&normalized, settings.spotify_running) {
         Some(super::spotify::Phrase::Control { command, label }) => {
-            return RouteResult::ran(transcript, action("SpotifyControl", command), label.to_uppercase(), 1.0);
+            return RouteResult::ran(transcript, action(ActionKind::SpotifyControl.as_str(), command), label.to_uppercase(), 1.0);
         }
         Some(super::spotify::Phrase::Play { query }) => {
             let label = format!("PLAY {}", query.to_uppercase());
-            return RouteResult::ran(transcript, action("SpotifyPlay", query), label, 1.0);
+            return RouteResult::ran(transcript, action(ActionKind::SpotifyPlay.as_str(), query), label, 1.0);
         }
         None => {}
     }
     if let Some((value, label)) = super::system::radio(&normalized) {
-        return RouteResult::ran(transcript, action("Radio", value), label, 1.0);
+        return RouteResult::ran(transcript, action(ActionKind::Radio.as_str(), value), label, 1.0);
     }
     if let Some((value, label)) = super::system::brightness(&normalized) {
-        return RouteResult::ran(transcript, action("Brightness", value), label, 1.0);
+        return RouteResult::ran(transcript, action(ActionKind::Brightness.as_str(), value), label, 1.0);
     }
     if let Some((uri, name)) = settings_page(&normalized) {
-        return RouteResult::ran(transcript, action("OpenSettings", uri), format!("{name} SETTINGS").to_uppercase(), 1.0);
+        return RouteResult::ran(transcript, action(ActionKind::OpenSettings.as_str(), uri), format!("{name} SETTINGS").to_uppercase(), 1.0);
     }
     if let Some((browser, chord)) = parse_browser_action(&normalized) {
         use crate::actions::ActionStep;
         let step = |kind: &str, value: &str| ActionStep { kind: kind.into(), value: value.into(), ..Default::default() };
         let label = format!("{chord}{}", browser.as_deref().map(|b| format!(" IN {}", b.to_uppercase())).unwrap_or_default());
-        let Some(browser) = browser else { return RouteResult::ran(transcript, action("Shortcut", chord), label, 1.0) };
+        let Some(browser) = browser else { return RouteResult::ran(transcript, action(ActionKind::Shortcut.as_str(), chord), label, 1.0) };
         if !settings.allow_launch_app {
             return RouteResult::failed(transcript, "LaunchApp is disabled for voice.");
         }
-        let steps = vec![step("LaunchApp", &browser), step("Delay", "500"), step("Shortcut", chord)];
-        return RouteResult::ran(transcript, ButtonAction { kind: "Automation".into(), value: String::new(), steps }, label, 1.0);
+        let steps = vec![step(ActionKind::LaunchApp.as_str(), &browser), step(ActionKind::Delay.as_str(), "500"), step(ActionKind::Shortcut.as_str(), chord)];
+        return RouteResult::ran(transcript, ButtonAction { kind: ActionKind::Automation.as_str().into(), value: String::new(), steps }, label, 1.0);
     }
     if let Some(result) = try_close(&normalized, transcript, &settings.running) {
         return result;
@@ -216,7 +216,7 @@ fn route_one(transcript: &str, lexicon: &[LexiconEntry], settings: &RouterSettin
         return result;
     }
     if let Some(chord) = try_shortcut_phrase(&normalized) {
-        return RouteResult::ran(transcript, action("Shortcut", chord.clone()), chord, 1.0);
+        return RouteResult::ran(transcript, action(ActionKind::Shortcut.as_str(), chord.clone()), chord, 1.0);
     }
     if let Some(result) = try_switch(&normalized, transcript, lexicon) {
         return result;
@@ -257,7 +257,7 @@ fn try_close(normalized: &str, transcript: &str, running: &[RunningApp]) -> Opti
         return None;
     }
     match find_running(target, running) {
-        Some(app) => Some(RouteResult::ran(transcript, action("CloseApp", &app.process), format!("CLOSE {}", app.process.to_uppercase()), 1.0)),
+        Some(app) => Some(RouteResult::ran(transcript, action(ActionKind::CloseApp.as_str(), &app.process), format!("CLOSE {}", app.process.to_uppercase()), 1.0)),
         None => Some(RouteResult::failed(transcript, format!("\"{target}\" is not open."))),
     }
 }
@@ -293,7 +293,7 @@ pub fn find_running<'a>(spoken: &str, running: &'a [RunningApp]) -> Option<&'a R
 /// RunScript, alone or inside an automation, never runs from voice.
 fn is_run_script(action: &ButtonAction) -> bool {
     VoiceActionPolicy::is_forbidden(Some(&action.kind))
-        || (action.kind.eq_ignore_ascii_case("Automation")
+        || (ActionKind::of_ignore_case(&action.kind) == ActionKind::Automation
             && action.steps.iter().any(|s| VoiceActionPolicy::is_forbidden(Some(&s.kind))))
 }
 
@@ -336,7 +336,7 @@ fn resolve_entry(entry: &LexiconEntry, settings: &RouterSettings) -> Result<Butt
                 return Err("LaunchApp is disabled for voice.".into());
             }
             let alias = entry.app_alias.as_deref().or(entry.profile_name.as_deref()).unwrap_or(&entry.phrase);
-            Ok(action("LaunchApp", alias))
+            Ok(action(ActionKind::LaunchApp.as_str(), alias))
         }
     }
 }
@@ -352,12 +352,12 @@ fn arrange(transcript: &str, apps: &[super::window_cmd::Arrangement], settings: 
     for app in apps {
         if app.open {
             let value = guess_app_from_text_if(&app.app, &|a| settings.is_installed(a)).unwrap_or_else(|| app.app.clone());
-            steps.push(ActionStep { kind: "LaunchApp".into(), value, ..Default::default() });
+            steps.push(ActionStep { kind: ActionKind::LaunchApp.as_str().into(), value, ..Default::default() });
         }
-        steps.push(ActionStep { kind: "WindowCommand".into(), value: format!("{}|{}", app.screen, app.app), ..Default::default() });
+        steps.push(ActionStep { kind: ActionKind::WindowCommand.as_str().into(), value: format!("{}|{}", app.screen, app.app), ..Default::default() });
     }
     let label = apps.iter().map(|a| a.app.to_uppercase()).collect::<Vec<_>>().join(" + ");
-    RouteResult::ran(transcript, ButtonAction { kind: "Automation".into(), value: String::new(), steps }, format!("ARRANGE {label}"), 1.0)
+    RouteResult::ran(transcript, ButtonAction { kind: ActionKind::Automation.as_str().into(), value: String::new(), steps }, format!("ARRANGE {label}"), 1.0)
 }
 
 fn try_type(normalized: &str, transcript: &str, settings: &RouterSettings) -> Option<RouteResult> {
@@ -369,14 +369,14 @@ fn try_type(normalized: &str, transcript: &str, settings: &RouterSettings) -> Op
     if !settings.allow_type_text {
         return Some(RouteResult::failed(transcript, "Type/paste is disabled for voice."));
     }
-    Some(RouteResult::ran(transcript, action("PasteText", text), "TYPE", 1.0))
+    Some(RouteResult::ran(transcript, action(ActionKind::PasteText.as_str(), text), "TYPE", 1.0))
 }
 
 /// "search for X [on site] [in browser]": opens the results page. Before `try_open`, which would read
 /// "open chrome and search for X" as launching a program.
 fn try_search(normalized: &str, transcript: &str, settings: &RouterSettings) -> Option<RouteResult> {
     let (kind, value, reply) = super::web_search::plan(normalized)?;
-    if kind == "LaunchApp" && !settings.allow_launch_app {
+    if ActionKind::of(kind) == ActionKind::LaunchApp && !settings.allow_launch_app {
         return Some(RouteResult::failed(transcript, "LaunchApp is disabled for voice."));
     }
     Some(RouteResult::ran(transcript, action(kind, value), reply, 1.0))
@@ -416,13 +416,13 @@ fn try_open(normalized: &str, transcript: &str, settings: &RouterSettings) -> Op
     }
     if let Some((browser, url)) = parse_browser_open(normalized) {
         let label = format!("OPEN {url} IN {browser}").to_uppercase();
-        return Some(RouteResult::ran(transcript, action("LaunchApp", format!("{browser}|{url}")), label, 1.0));
+        return Some(RouteResult::ran(transcript, action(ActionKind::LaunchApp.as_str(), format!("{browser}|{url}")), label, 1.0));
     }
     // "open the chrome window", "open notepad app": the app is the name between the filler words.
     let target = target.strip_prefix("the ").unwrap_or(target);
     let target = ["window", "app", "application"].into_iter().find_map(|w| target.strip_suffix(w).and_then(|t| t.strip_suffix(' '))).filter(|t| !t.is_empty()).unwrap_or(target);
     let guess = guess_app_from_text_if(target, &|a| settings.is_installed(a)).unwrap_or_else(|| target.to_string());
-    Some(RouteResult::ran(transcript, action("LaunchApp", guess), target.to_uppercase(), 1.0))
+    Some(RouteResult::ran(transcript, action(ActionKind::LaunchApp.as_str(), guess), target.to_uppercase(), 1.0))
 }
 
 fn try_switch(normalized: &str, transcript: &str, lexicon: &[LexiconEntry]) -> Option<RouteResult> {
@@ -443,7 +443,7 @@ fn try_switch(normalized: &str, transcript: &str, lexicon: &[LexiconEntry]) -> O
         return Some(RouteResult::failed(transcript, format!("No app/profile match for \"{target}\".")));
     };
     let process = entry.app_alias.as_deref().or(entry.profile_name.as_deref()).unwrap_or(&entry.phrase);
-    Some(RouteResult::ran(transcript, action("LaunchApp", process), format!("SWITCH {process}").to_uppercase(), score.min(0.95)))
+    Some(RouteResult::ran(transcript, action(ActionKind::LaunchApp.as_str(), process), format!("SWITCH {process}").to_uppercase(), score.min(0.95)))
 }
 
 /// "press control shift t" → `Ctrl+Shift+T`, if that is a real shortcut.

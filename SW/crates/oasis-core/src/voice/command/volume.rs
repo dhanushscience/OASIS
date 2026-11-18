@@ -5,7 +5,7 @@
 //! 50 presses down and then N/2 up (an Automation of Shortcut steps). It shows the volume pop-up
 //! and is not exact if the machine uses another step; upgrade to the endpoint volume API then.
 
-use crate::actions::{ActionStep, ButtonAction};
+use crate::actions::{ActionKind, ActionStep, ButtonAction};
 
 const STEP_PERCENT: u32 = 2;
 const VERBS: [&str; 12] = ["set", "make", "change", "increase", "decrease", "raise", "lower", "turn", "up", "down", "to", "windows"];
@@ -59,20 +59,20 @@ pub(super) fn percent(word: &str) -> Option<u32> {
 }
 
 fn key(name: &str) -> ActionStep {
-    ActionStep { kind: "Shortcut".into(), value: name.into(), ..Default::default() }
+    ActionStep { kind: ActionKind::Shortcut.as_str().into(), value: name.into(), ..Default::default() }
 }
 
 fn presses(name: &str, times: u32) -> ButtonAction {
     if times == 1 {
-        return ButtonAction { kind: "Shortcut".into(), value: name.into(), steps: vec![] };
+        return ButtonAction { kind: ActionKind::Shortcut.as_str().into(), value: name.into(), steps: vec![] };
     }
-    ButtonAction { kind: "Automation".into(), value: String::new(), steps: (0..times).map(|_| key(name)).collect() }
+    ButtonAction { kind: ActionKind::Automation.as_str().into(), value: String::new(), steps: (0..times).map(|_| key(name)).collect() }
 }
 
 fn set_to(percent: u32) -> ButtonAction {
     let mut steps: Vec<ActionStep> = (0..100 / STEP_PERCENT).map(|_| key("VolumeDown")).collect();
     steps.extend((0..percent.div_ceil(STEP_PERCENT).min(100 / STEP_PERCENT)).map(|_| key("VolumeUp")));
-    ButtonAction { kind: "Automation".into(), value: String::new(), steps }
+    ButtonAction { kind: ActionKind::Automation.as_str().into(), value: String::new(), steps }
 }
 
 #[cfg(test)]

@@ -3,6 +3,8 @@
 //! `Services/Intent/WebSearchIntentParser.cs`. Input is already normalized (lower case, letters,
 //! digits and spaces).
 
+use crate::actions::ActionKind;
+
 /// A search site and how its results address is built.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Site {
@@ -160,8 +162,8 @@ pub fn plan(normalized: &str) -> Option<(&'static str, String, String)> {
     let request = try_parse(normalized)?;
     let reply = format!("Search {} for {}.", request.site.name, request.query);
     Some(match request.browser {
-        Some(browser) => ("LaunchApp", format!("{browser}|{}", request.url()), reply),
-        None => ("OpenUrl", request.url(), reply),
+        Some(browser) => (ActionKind::LaunchApp.as_str(), format!("{browser}|{}", request.url()), reply),
+        None => (ActionKind::OpenUrl.as_str(), request.url(), reply),
     })
 }
 

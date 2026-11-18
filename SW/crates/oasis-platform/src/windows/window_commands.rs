@@ -20,7 +20,7 @@ fn rc(p: PixelRect) -> Rect {
 
 /// Run a `WindowCommand` (`verb|app`) or a `WindowSplit` (`app,app,…`).
 pub fn run(kind: &str, value: &str) -> Result<(), String> {
-    if kind == "WindowSplit" {
+    if oasis_core::actions::ActionKind::of(kind) == oasis_core::actions::ActionKind::WindowSplit {
         return share_screen(&value.split(',').map(str::trim).filter(|a| !a.is_empty()).collect::<Vec<_>>());
     }
     let (verb, app) = value.split_once('|').unwrap_or((value, ""));
