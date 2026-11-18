@@ -75,7 +75,7 @@ pub fn run(args: &[String]) -> ExitCode {
             println!("heard: \"{text}\"{}", if typed { "  (typed)" } else { "  (not typed)" });
         }
         EngineEvent::PadButton { .. } | EngineEvent::HideLabels | EngineEvent::VoiceLevel { .. } => {}
-        EngineEvent::SettingsChanged | EngineEvent::Stopped => {}
+        EngineEvent::SettingsChanged | EngineEvent::Stopped | EngineEvent::MicOffer { .. } => {}
     }) {
         Ok(engine) => engine,
         Err(e) => {
