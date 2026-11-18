@@ -12,7 +12,7 @@ Built in **149 hours.**
 
 ## See it
 
-**[dhanushscience.github.io/PROJECT-OASIS](https://dhanushscience.github.io/PROJECT-OASIS/)**
+**[dhanushscience.github.io/OASIS](https://dhanushscience.github.io/OASIS/)**
 
 Scroll the workbench. Watch it assemble. Feel what is coming.
 
@@ -24,7 +24,7 @@ Star this repo to show interest.
 
 When OASIS launches, people who starred get first access.
 
-**[★ Star PROJECT OASIS](https://github.com/dhanushscience/PROJECT-OASIS)**
+**[★ Star OASIS](https://github.com/dhanushscience/OASIS)**
 
 Open source if the response is there.
 

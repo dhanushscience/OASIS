@@ -3,7 +3,7 @@
  * Star count is read from the public GitHub API when available.
  */
 
-const REPO = 'dhanushscience/PROJECT-OASIS'; // shows stars for the repo linked in the footer
+const REPO = 'dhanushscience/OASIS'; // shows stars for the repo linked in the footer
 const REPO_URL = `https://github.com/${REPO}`;
 
 function setNote(text, kind = '') {
